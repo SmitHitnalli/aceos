@@ -97,8 +97,6 @@ The domain model and normalized database foundation are working. JDBC repositori
 
 Next development steps:
 
-Next development steps:
-
 1. Add work-order persistence and retrieval.
 2. Add maintenance-record persistence and retrieval.
 3. Add transaction handling for the complete maintenance workflow.
