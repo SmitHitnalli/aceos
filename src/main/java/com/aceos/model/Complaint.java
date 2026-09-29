@@ -14,61 +14,133 @@ public class Complaint {
     private final LocalDateTime reportedAt;
 
     public Complaint(
+            Asset asset,
+            User reportedBy,
+            String description,
+            ComplaintPriority priority) {
+        this(
+                0,
+                asset,
+                reportedBy,
+                description,
+                priority
+        );
+    }
+
+    public Complaint(
             int complaintId,
             Asset asset,
             User reportedBy,
             String description,
             ComplaintPriority priority) {
+        this(
+                complaintId,
+                asset,
+                reportedBy,
+                description,
+                priority,
+                ComplaintStatus.SUBMITTED,
+                LocalDateTime.now().withNano(0)
+        );
+    }
+
+    public Complaint(
+            int complaintId,
+            Asset asset,
+            User reportedBy,
+            String description,
+            ComplaintPriority priority,
+            ComplaintStatus status,
+            LocalDateTime reportedAt) {
         this.complaintId = complaintId;
-        this.asset = Objects.requireNonNull(asset, "Asset is required");
-        this.reportedBy = Objects.requireNonNull(reportedBy, "Requester is required");
-        this.description = requireText(description, "Description is required");
-        this.priority = Objects.requireNonNull(priority, "Priority is required");
-        this.status = ComplaintStatus.SUBMITTED;
-        this.reportedAt = LocalDateTime.now();
+        this.asset = Objects.requireNonNull(
+                asset,
+                "Asset is required"
+        );
+        this.reportedBy = Objects.requireNonNull(
+                reportedBy,
+                "Requester is required"
+        );
+        this.description = requireText(
+                description,
+                "Description is required"
+        );
+        this.priority = Objects.requireNonNull(
+                priority,
+                "Priority is required"
+        );
+        this.status = Objects.requireNonNull(
+                status,
+                "Status is required"
+        );
+        this.reportedAt = Objects.requireNonNull(
+                reportedAt,
+                "Reported time is required"
+        ).withNano(0);
     }
 
     public void accept(User administrator) {
         requireAdministrator(administrator);
-        requireStatus(ComplaintStatus.SUBMITTED, "Only a submitted complaint can be accepted");
+        requireStatus(
+                ComplaintStatus.SUBMITTED,
+                "Only a submitted complaint can be accepted"
+        );
         status = ComplaintStatus.ACCEPTED;
     }
 
     public void reject(User administrator) {
         requireAdministrator(administrator);
-        requireStatus(ComplaintStatus.SUBMITTED, "Only a submitted complaint can be rejected");
+        requireStatus(
+                ComplaintStatus.SUBMITTED,
+                "Only a submitted complaint can be rejected"
+        );
         status = ComplaintStatus.REJECTED;
     }
 
     void markWorkOrderCreated() {
-        requireStatus(ComplaintStatus.ACCEPTED, "The complaint must be accepted first");
+        requireStatus(
+                ComplaintStatus.ACCEPTED,
+                "The complaint must be accepted first"
+        );
         status = ComplaintStatus.WORK_ORDER_CREATED;
     }
 
     void resolve() {
         requireStatus(
                 ComplaintStatus.WORK_ORDER_CREATED,
-                "A complaint can be resolved only after a work order is created");
+                "A complaint can be resolved only after a work order is created"
+        );
         status = ComplaintStatus.RESOLVED;
     }
 
-    private void requireStatus(ComplaintStatus expectedStatus, String message) {
+    private void requireStatus(
+            ComplaintStatus expectedStatus,
+            String message) {
         if (status != expectedStatus) {
             throw new IllegalStateException(message);
         }
     }
 
     private static void requireAdministrator(User user) {
-        Objects.requireNonNull(user, "Administrator is required");
+        Objects.requireNonNull(
+                user,
+                "Administrator is required"
+        );
+
         if (user.getRole() != UserRole.ADMINISTRATOR) {
-            throw new IllegalArgumentException("Only an administrator can perform this action");
+            throw new IllegalArgumentException(
+                    "Only an administrator can perform this action"
+            );
         }
     }
 
-    private static String requireText(String value, String message) {
+    private static String requireText(
+            String value,
+            String message) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(message);
         }
+
         return value;
     }
 

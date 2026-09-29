@@ -28,6 +28,7 @@ Asset
 - Environment-based JDBC configuration
 - User persistence and retrieval
 - Asset persistence and retrieval
+- Complaint persistence and relational reconstruction
 
 ## Technology Stack
 
@@ -85,18 +86,20 @@ mvn exec:java "-Dexec.mainClass=com.aceos.Main"
 ```powershell
 mvn exec:java "-Dexec.mainClass=com.aceos.UserRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.AssetRepositoryTest"
+mvn exec:java "-Dexec.mainClass=com.aceos.ComplaintRepositoryTest"
 ```
 
 The required database environment variables must be available in the terminal before running repository verification.
 
 ## Development Status
 
-The domain model and normalized database foundation are working. JDBC repositories currently support users and assets.
+The domain model and normalized database foundation are working. JDBC repositories currently support users, assets, and complaints.
 
 Next development steps:
 
-1. Add complaint persistence and retrieval.
-2. Add work-order persistence and retrieval.
-3. Add maintenance-record persistence and retrieval.
-4. Add transaction handling for the complete maintenance workflow.
-5. Build the JavaFX desktop interface.
+Next development steps:
+
+1. Add work-order persistence and retrieval.
+2. Add maintenance-record persistence and retrieval.
+3. Add transaction handling for the complete maintenance workflow.
+4. Build the JavaFX desktop interface.
