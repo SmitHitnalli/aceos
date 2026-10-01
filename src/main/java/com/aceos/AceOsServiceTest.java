@@ -12,11 +12,12 @@ import com.aceos.model.WorkOrder;
 import com.aceos.model.WorkOrderStatus;
 import com.aceos.service.AceOsService;
 
-import java.sql.SQLException;
+import com.aceos.service.AceOsServiceException;
 
 public class AceOsServiceTest {
 
-    public static void main(String[] args) throws SQLException {
+    public static void main(String[] args)
+        throws AceOsServiceException {
         AceOsService service =
                 new AceOsService();
 

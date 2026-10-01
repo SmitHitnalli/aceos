@@ -35,6 +35,8 @@ Asset
 - Maintenance-record persistence and related work-order reconstruction
 - Atomic work-order completion and maintenance-record creation
 - Database-backed application service for the complete core workflow
+- Application-level input validation
+- Clear service errors for invalid workflows and database failures
 
 ## Technology Stack
 
@@ -98,16 +100,17 @@ mvn exec:java "-Dexec.mainClass=com.aceos.WorkOrderRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.WorkOrderLifecycleTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.MaintenanceRecordRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.AceOsServiceTest"
+mvn exec:java "-Dexec.mainClass=com.aceos.AceOsServiceValidationTest"
 ```
 
 The required database environment variables must be available in the terminal before running repository verification.
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, and application service are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history.
+The domain model, normalized database foundation, JDBC repositories, application service, input validation, and database-error translation are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history.
 
 Next development steps:
 
-1. Add application-level validation and clear database error handling.
-2. Build the JavaFX desktop interface.
+1. Add JavaFX and create the desktop application shell.
+2. Build the first user-management interface.
 3. Connect the interface to the application service.

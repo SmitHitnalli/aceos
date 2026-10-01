@@ -9,14 +9,14 @@ import com.aceos.model.UserRole;
 import com.aceos.model.WorkOrder;
 import com.aceos.service.AceOsService;
 
-import java.sql.SQLException;
+import com.aceos.service.AceOsServiceException;
 
 public class Main {
 
     public static void main(String[] args) {
         try {
             runDatabaseWorkflow();
-        } catch (SQLException | RuntimeException exception) {
+        } catch (AceOsServiceException | RuntimeException exception) {
             System.err.println(
                     "AceOS workflow failed: "
                             + exception.getMessage()
@@ -30,7 +30,7 @@ public class Main {
     }
 
     private static void runDatabaseWorkflow()
-            throws SQLException {
+            throws AceOsServiceException {
         AceOsService service =
                 new AceOsService();
 
