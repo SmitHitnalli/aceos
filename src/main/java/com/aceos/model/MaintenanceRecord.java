@@ -10,20 +10,73 @@ public class MaintenanceRecord {
     private final String actionTaken;
     private final LocalDateTime recordedAt;
 
-    public MaintenanceRecord(int maintenanceRecordId, WorkOrder workOrder, String actionTaken) {
-        this.workOrder = Objects.requireNonNull(workOrder, "Work order is required");
+    public MaintenanceRecord(
+            WorkOrder workOrder,
+            String actionTaken) {
+        this(
+                0,
+                workOrder,
+                actionTaken,
+                LocalDateTime.now().withNano(0)
+        );
 
-        if (workOrder.getStatus() != WorkOrderStatus.COMPLETED) {
+        requireCompletedWorkOrder(workOrder);
+    }
+
+    public MaintenanceRecord(
+            int maintenanceRecordId,
+            WorkOrder workOrder,
+            String actionTaken) {
+        this(
+                maintenanceRecordId,
+                workOrder,
+                actionTaken,
+                LocalDateTime.now().withNano(0)
+        );
+
+        requireCompletedWorkOrder(workOrder);
+    }
+
+    public MaintenanceRecord(
+            int maintenanceRecordId,
+            WorkOrder workOrder,
+            String actionTaken,
+            LocalDateTime recordedAt) {
+        this.workOrder = Objects.requireNonNull(
+                workOrder,
+                "Work order is required"
+        );
+
+        if (workOrder.getStatus() != WorkOrderStatus.COMPLETED
+                && workOrder.getStatus() != WorkOrderStatus.VERIFIED) {
             throw new IllegalStateException(
-                    "A maintenance record can be created only for a completed work order");
+                    "A maintenance record requires a completed "
+                            + "or verified work order"
+            );
         }
+
         if (actionTaken == null || actionTaken.isBlank()) {
-            throw new IllegalArgumentException("The maintenance action is required");
+            throw new IllegalArgumentException(
+                    "The maintenance action is required"
+            );
         }
 
         this.maintenanceRecordId = maintenanceRecordId;
         this.actionTaken = actionTaken;
-        this.recordedAt = LocalDateTime.now();
+        this.recordedAt = Objects.requireNonNull(
+                recordedAt,
+                "Record time is required"
+        ).withNano(0);
+    }
+
+    private static void requireCompletedWorkOrder(
+            WorkOrder workOrder) {
+        if (workOrder.getStatus() != WorkOrderStatus.COMPLETED) {
+            throw new IllegalStateException(
+                    "A new maintenance record can be created "
+                            + "only for a completed work order"
+            );
+        }
     }
 
     public int getMaintenanceRecordId() {
