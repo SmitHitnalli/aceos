@@ -64,6 +64,44 @@ public class WorkOrderRepository {
         }
     }
 
+    public void updateLifecycle(
+            WorkOrder workOrder) throws SQLException {
+        requirePersistedLifecycleChange(workOrder);
+
+        try (Connection connection =
+                     DatabaseConnection.getConnection()) {
+            connection.setAutoCommit(false);
+
+            try {
+                switch (workOrder.getStatus()) {
+                    case IN_PROGRESS ->
+                            persistStart(connection, workOrder);
+
+                    case COMPLETED ->
+                            persistCompletion(connection, workOrder);
+
+                    case VERIFIED ->
+                            persistVerification(connection, workOrder);
+
+                    default ->
+                            throw new IllegalArgumentException(
+                                    "The work order has no lifecycle change to persist"
+                            );
+                }
+
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackException) {
+                    exception.addSuppressed(rollbackException);
+                }
+
+                throw exception;
+            }
+        }
+    }
+
     public Optional<WorkOrder> findById(
             int workOrderId) throws SQLException {
         String sql = """
@@ -315,6 +353,289 @@ public class WorkOrderRepository {
                                 + "ACCEPTED database state"
                 );
             }
+        }
+    }
+
+    private static void persistStart(
+            Connection connection,
+            WorkOrder workOrder) throws SQLException {
+        String workOrderSql = """
+                UPDATE work_orders
+                SET status = ?,
+                    started_at = ?
+                WHERE work_order_id = ?
+                  AND status = 'ASSIGNED'
+                  AND started_at IS NULL
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(workOrderSql)) {
+            statement.setString(
+                    1,
+                    workOrder.getStatus().name()
+            );
+            statement.setTimestamp(
+                    2,
+                    Timestamp.valueOf(workOrder.getStartedAt())
+            );
+            statement.setInt(
+                    3,
+                    workOrder.getWorkOrderId()
+            );
+
+            requireOneUpdatedRow(
+                    statement.executeUpdate(),
+                    "The work order was not in the expected "
+                                + "ASSIGNED database state"
+            );
+        }
+
+        String assetSql = """
+                UPDATE assets
+                SET status = ?
+                WHERE asset_id = ?
+                  AND status = 'ACTIVE'
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(assetSql)) {
+            statement.setString(
+                    1,
+                    workOrder
+                            .getComplaint()
+                            .getAsset()
+                            .getStatus()
+                            .name()
+            );
+            statement.setInt(
+                    2,
+                    workOrder
+                            .getComplaint()
+                            .getAsset()
+                            .getAssetId()
+            );
+
+            requireOneUpdatedRow(
+                    statement.executeUpdate(),
+                    "The asset was not in the expected "
+                                + "ACTIVE database state"
+            );
+        }
+    }
+
+    private static void persistCompletion(
+            Connection connection,
+            WorkOrder workOrder) throws SQLException {
+        String sql = """
+                UPDATE work_orders
+                SET status = ?,
+                    completed_at = ?
+                WHERE work_order_id = ?
+                  AND status = 'IN_PROGRESS'
+                  AND completed_at IS NULL
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(sql)) {
+            statement.setString(
+                    1,
+                    workOrder.getStatus().name()
+            );
+            statement.setTimestamp(
+                    2,
+                    Timestamp.valueOf(workOrder.getCompletedAt())
+            );
+            statement.setInt(
+                    3,
+                    workOrder.getWorkOrderId()
+            );
+
+            requireOneUpdatedRow(
+                    statement.executeUpdate(),
+                    "The work order was not in the expected "
+                                + "IN_PROGRESS database state"
+            );
+        }
+    }
+
+    private static void persistVerification(
+            Connection connection,
+            WorkOrder workOrder) throws SQLException {
+        String workOrderSql = """
+                UPDATE work_orders
+                SET status = ?,
+                    verified_at = ?
+                WHERE work_order_id = ?
+                  AND status = 'COMPLETED'
+                  AND verified_at IS NULL
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(workOrderSql)) {
+            statement.setString(
+                    1,
+                    workOrder.getStatus().name()
+            );
+            statement.setTimestamp(
+                    2,
+                    Timestamp.valueOf(workOrder.getVerifiedAt())
+            );
+            statement.setInt(
+                    3,
+                    workOrder.getWorkOrderId()
+            );
+
+            requireOneUpdatedRow(
+                    statement.executeUpdate(),
+                    "The work order was not in the expected "
+                                + "COMPLETED database state"
+            );
+        }
+
+        String assetSql = """
+                UPDATE assets
+                SET status = ?
+                WHERE asset_id = ?
+                  AND status = 'UNDER_MAINTENANCE'
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(assetSql)) {
+            statement.setString(
+                    1,
+                    workOrder
+                            .getComplaint()
+                            .getAsset()
+                            .getStatus()
+                            .name()
+            );
+            statement.setInt(
+                    2,
+                    workOrder
+                            .getComplaint()
+                            .getAsset()
+                            .getAssetId()
+            );
+
+            requireOneUpdatedRow(
+                    statement.executeUpdate(),
+                    "The asset was not in the expected "
+                                + "UNDER_MAINTENANCE database state"
+            );
+        }
+
+        String complaintSql = """
+                UPDATE complaints
+                SET status = ?
+                WHERE complaint_id = ?
+                  AND status = 'WORK_ORDER_CREATED'
+                """;
+
+        try (PreparedStatement statement =
+                     connection.prepareStatement(complaintSql)) {
+            statement.setString(
+                    1,
+                    workOrder
+                            .getComplaint()
+                            .getStatus()
+                            .name()
+            );
+            statement.setInt(
+                    2,
+                    workOrder
+                            .getComplaint()
+                            .getComplaintId()
+            );
+
+            requireOneUpdatedRow(
+                    statement.executeUpdate(),
+                    "The complaint was not in the expected "
+                                + "WORK_ORDER_CREATED database state"
+            );
+        }
+    }
+
+    private static void requirePersistedLifecycleChange(
+            WorkOrder workOrder) {
+        if (workOrder.getWorkOrderId() <= 0) {
+            throw new IllegalArgumentException(
+                    "The work order must be saved first"
+            );
+        }
+
+        switch (workOrder.getStatus()) {
+            case IN_PROGRESS -> {
+                if (workOrder.getStartedAt() == null) {
+                    throw new IllegalArgumentException(
+                            "An in-progress work order requires a start time"
+                    );
+                }
+
+                if (workOrder.getComplaint().getAsset().getStatus()
+                        != AssetStatus.UNDER_MAINTENANCE) {
+                    throw new IllegalArgumentException(
+                            "The asset must be under maintenance"
+                    );
+                }
+            }
+
+            case COMPLETED -> {
+                if (workOrder.getStartedAt() == null
+                        || workOrder.getCompletedAt() == null) {
+                    throw new IllegalArgumentException(
+                            "A completed work order requires "
+                                    + "start and completion times"
+                    );
+                }
+
+                if (workOrder.getComplaint().getAsset().getStatus()
+                        != AssetStatus.UNDER_MAINTENANCE) {
+                    throw new IllegalArgumentException(
+                            "The completed work-order asset must "
+                                    + "remain under maintenance"
+                    );
+                }
+            }
+
+            case VERIFIED -> {
+                if (workOrder.getStartedAt() == null
+                        || workOrder.getCompletedAt() == null
+                        || workOrder.getVerifiedAt() == null) {
+                    throw new IllegalArgumentException(
+                            "A verified work order requires all "
+                                    + "lifecycle timestamps"
+                    );
+                }
+
+                if (workOrder.getComplaint().getAsset().getStatus()
+                        != AssetStatus.ACTIVE) {
+                    throw new IllegalArgumentException(
+                            "The verified work-order asset must be active"
+                    );
+                }
+
+                if (workOrder.getComplaint().getStatus()
+                        != ComplaintStatus.RESOLVED) {
+                    throw new IllegalArgumentException(
+                            "The verified work-order complaint "
+                                    + "must be resolved"
+                    );
+                }
+            }
+
+            default ->
+                    throw new IllegalArgumentException(
+                            "Only started, completed, or verified "
+                                    + "work orders can be updated"
+                    );
+        }
+    }
+
+    private static void requireOneUpdatedRow(
+            int affectedRows,
+            String message) throws SQLException {
+        if (affectedRows != 1) {
+            throw new SQLException(message);
         }
     }
 

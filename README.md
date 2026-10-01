@@ -30,6 +30,7 @@ Asset
 - Asset persistence and retrieval
 - Complaint persistence and relational reconstruction
 - Work-order persistence with transactional complaint-status updates
+- Transactional work-order lifecycle persistence for start, complete, and verify
 
 ## Technology Stack
 
@@ -89,17 +90,18 @@ mvn exec:java "-Dexec.mainClass=com.aceos.UserRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.AssetRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.ComplaintRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.WorkOrderRepositoryTest"
+mvn exec:java "-Dexec.mainClass=com.aceos.WorkOrderLifecycleTest"
 ```
 
 The required database environment variables must be available in the terminal before running repository verification.
 
 ## Development Status
 
-The domain model and normalized database foundation are working. JDBC repositories currently support users, assets, complaints, and work orders.
+The domain model and normalized database foundation are working. JDBC repositories support users, assets, complaints, work-order creation, and transactional work-order lifecycle updates.
 
 Next development steps:
 
 1. Add maintenance-record persistence and retrieval.
-2. Persist work-order lifecycle changes.
-3. Add transaction handling for the complete maintenance workflow.
-4. Build the JavaFX desktop interface.
+2. Coordinate the complete database-backed maintenance workflow.
+3. Replace the hard-coded demonstration with application operations.
+4. Build and connect the JavaFX desktop interface.
