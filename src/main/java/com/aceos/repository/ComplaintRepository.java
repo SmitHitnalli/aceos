@@ -96,6 +96,42 @@ public class ComplaintRepository {
         }
     }
 
+    public void updateReview(
+            Complaint complaint) throws SQLException {
+        requirePersistedReview(complaint);
+
+        String sql = """
+                UPDATE complaints
+                SET status = ?
+                WHERE complaint_id = ?
+                  AND status = 'SUBMITTED'
+                """;
+
+        try (
+                Connection connection = DatabaseConnection.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(sql)
+        ) {
+            statement.setString(
+                    1,
+                    complaint.getStatus().name()
+            );
+            statement.setInt(
+                    2,
+                    complaint.getComplaintId()
+            );
+
+            int affectedRows = statement.executeUpdate();
+
+            if (affectedRows != 1) {
+                throw new SQLException(
+                        "The complaint was not in the expected "
+                                + "SUBMITTED database state"
+                );
+            }
+        }
+    }
+
     public Optional<Complaint> findById(
             int complaintId) throws SQLException {
         String sql = """
@@ -179,6 +215,25 @@ public class ComplaintRepository {
 
                 return Optional.of(complaint);
             }
+        }
+    }
+
+    private static void requirePersistedReview(
+            Complaint complaint) {
+        if (complaint.getComplaintId() <= 0) {
+            throw new IllegalArgumentException(
+                    "The complaint must be saved first"
+            );
+        }
+
+        if (complaint.getStatus()
+                != ComplaintStatus.ACCEPTED
+                && complaint.getStatus()
+                != ComplaintStatus.REJECTED) {
+            throw new IllegalArgumentException(
+                    "Only an accepted or rejected complaint "
+                            + "review can be persisted"
+            );
         }
     }
 

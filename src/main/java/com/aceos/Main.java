@@ -1,70 +1,157 @@
 package com.aceos;
 
 import com.aceos.model.Asset;
-import com.aceos.model.AssetStatus;
 import com.aceos.model.Complaint;
 import com.aceos.model.ComplaintPriority;
 import com.aceos.model.MaintenanceRecord;
 import com.aceos.model.User;
 import com.aceos.model.UserRole;
 import com.aceos.model.WorkOrder;
+import com.aceos.service.AceOsService;
+
+import java.sql.SQLException;
 
 public class Main {
 
     public static void main(String[] args) {
-        Asset asset = new Asset(
-                1,
-                "MUJ-AC-001",
-                "Lecture Hall AC",
+        try {
+            runDatabaseWorkflow();
+        } catch (SQLException | RuntimeException exception) {
+            System.err.println(
+                    "AceOS workflow failed: "
+                            + exception.getMessage()
+            );
+
+            throw new IllegalStateException(
+                    "The database-backed workflow could not finish",
+                    exception
+            );
+        }
+    }
+
+    private static void runDatabaseWorkflow()
+            throws SQLException {
+        AceOsService service =
+                new AceOsService();
+
+        long uniqueValue = System.currentTimeMillis();
+
+        Asset asset = service.registerAsset(
+                "ACEOS-DEMO-" + uniqueValue,
+                "Lecture Hall Air Conditioner",
                 "Air Conditioner",
-                "AB1, Room 204",
-                AssetStatus.ACTIVE);
+                "Academic Block, Room 204"
+        );
 
-        User requester = new User(
-                1,
+        User requester = service.registerUser(
                 "Aarav Sharma",
-                "aarav@example.com",
-                UserRole.REQUESTER);
+                "aarav-"
+                        + uniqueValue
+                        + "@aceos.test",
+                UserRole.REQUESTER
+        );
 
-        User technician = new User(
-                2,
+        User technician = service.registerUser(
                 "Meera Singh",
-                "meera@example.com",
-                UserRole.TECHNICIAN);
+                "meera-"
+                        + uniqueValue
+                        + "@aceos.test",
+                UserRole.TECHNICIAN
+        );
 
-        User administrator = new User(
-                3,
+        User administrator = service.registerUser(
                 "Rohan Verma",
-                "rohan@example.com",
-                UserRole.ADMINISTRATOR);
+                "rohan-"
+                        + uniqueValue
+                        + "@aceos.test",
+                UserRole.ADMINISTRATOR
+        );
 
-        Complaint complaint = new Complaint(
-                1,
-                asset,
-                requester,
-                "The air conditioner is running but not cooling the room",
-                ComplaintPriority.HIGH);
+        Complaint complaint = service.submitComplaint(
+                asset.getAssetId(),
+                requester.getUserId(),
+                "The air conditioner is running "
+                        + "but not cooling the room",
+                ComplaintPriority.HIGH
+        );
 
-        complaint.accept(administrator);
+        Complaint acceptedComplaint =
+                service.acceptComplaint(
+                        complaint.getComplaintId(),
+                        administrator.getUserId()
+                );
 
-        WorkOrder workOrder = new WorkOrder(1, complaint, technician);
-        workOrder.start();
-        workOrder.complete();
+        WorkOrder workOrder =
+                service.assignWorkOrder(
+                        acceptedComplaint.getComplaintId(),
+                        technician.getUserId()
+                );
 
-        MaintenanceRecord maintenanceRecord = new MaintenanceRecord(
-                1,
-                workOrder,
-                "Cleaned the filters and replaced the faulty capacitor");
+        service.startWorkOrder(
+                workOrder.getWorkOrderId()
+        );
 
-        workOrder.verify(administrator);
+        MaintenanceRecord maintenanceRecord =
+                service.completeWorkOrder(
+                        workOrder.getWorkOrderId(),
+                        "Cleaned the filters and replaced "
+                                + "the faulty capacitor"
+                );
 
-        System.out.println("ACEOS WORKFLOW COMPLETED");
-        System.out.println("Asset: " + asset.getAssetCode() + " - " + asset.getName());
-        System.out.println("Reported by: " + complaint.getReportedBy().getName());
-        System.out.println("Assigned technician: " + workOrder.getTechnician().getName());
-        System.out.println("Maintenance action: " + maintenanceRecord.getActionTaken());
-        System.out.println("Asset status: " + asset.getStatus());
-        System.out.println("Complaint status: " + complaint.getStatus());
-        System.out.println("Work order status: " + workOrder.getStatus());
+        WorkOrder verifiedWorkOrder =
+                service.verifyWorkOrder(
+                        workOrder.getWorkOrderId(),
+                        administrator.getUserId()
+                );
+
+        Complaint finalComplaint =
+                service.getComplaint(
+                        complaint.getComplaintId()
+                );
+
+        Asset finalAsset =
+                service.getAsset(asset.getAssetId());
+
+        MaintenanceRecord finalMaintenanceRecord =
+                service.getMaintenanceRecord(
+                        maintenanceRecord
+                                .getMaintenanceRecordId()
+                );
+
+        System.out.println(
+                "ACEOS DATABASE WORKFLOW COMPLETED"
+        );
+        System.out.println(
+                "Asset: "
+                        + finalAsset.getAssetCode()
+                        + " - "
+                        + finalAsset.getName()
+        );
+        System.out.println(
+                "Reported by: " + requester.getName()
+        );
+        System.out.println(
+                "Assigned technician: "
+                        + verifiedWorkOrder
+                        .getTechnician()
+                        .getName()
+        );
+        System.out.println(
+                "Maintenance action: "
+                        + finalMaintenanceRecord
+                        .getActionTaken()
+        );
+        System.out.println(
+                "Asset status: "
+                        + finalAsset.getStatus()
+        );
+        System.out.println(
+                "Complaint status: "
+                        + finalComplaint.getStatus()
+        );
+        System.out.println(
+                "Work-order status: "
+                        + verifiedWorkOrder.getStatus()
+        );
     }
 }

@@ -29,10 +29,12 @@ Asset
 - User persistence and retrieval
 - Asset persistence and retrieval
 - Complaint persistence and relational reconstruction
+- Persisted complaint acceptance and rejection decisions
 - Work-order persistence with transactional complaint-status updates
 - Transactional work-order lifecycle persistence for start, complete, and verify
 - Maintenance-record persistence and related work-order reconstruction
 - Atomic work-order completion and maintenance-record creation
+- Database-backed application service for the complete core workflow
 
 ## Technology Stack
 
@@ -54,6 +56,7 @@ aceos/
 │   ├── database/
 │   ├── model/
 │   ├── repository/
+│   ├── service/
 │   └── Main.java
 ├── pom.xml
 └── README.md
@@ -79,7 +82,7 @@ From the project directory:
 mvn compile
 ```
 
-## Run the In-Memory Workflow
+## Run the Database-Backed Workflow
 
 ```powershell
 mvn exec:java "-Dexec.mainClass=com.aceos.Main"
@@ -94,16 +97,17 @@ mvn exec:java "-Dexec.mainClass=com.aceos.ComplaintRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.WorkOrderRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.WorkOrderLifecycleTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.MaintenanceRecordRepositoryTest"
+mvn exec:java "-Dexec.mainClass=com.aceos.AceOsServiceTest"
 ```
 
 The required database environment variables must be available in the terminal before running repository verification.
 
 ## Development Status
 
-The domain model and normalized database foundation are working. JDBC repositories support users, assets, complaints, work orders, transactional lifecycle updates, and maintenance records. Work-order completion and maintenance-record creation now commit or roll back together.
+The domain model, normalized database foundation, JDBC repositories, and application service are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history.
 
 Next development steps:
 
-1. Replace the hard-coded demonstration with application operations.
-2. Build and connect the JavaFX desktop interface.
-3. Add user-facing validation and database error handling.
+1. Add application-level validation and clear database error handling.
+2. Build the JavaFX desktop interface.
+3. Connect the interface to the application service.
