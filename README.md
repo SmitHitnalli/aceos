@@ -32,6 +32,7 @@ Asset
 - Work-order persistence with transactional complaint-status updates
 - Transactional work-order lifecycle persistence for start, complete, and verify
 - Maintenance-record persistence and related work-order reconstruction
+- Atomic work-order completion and maintenance-record creation
 
 ## Technology Stack
 
@@ -99,10 +100,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model and normalized database foundation are working. JDBC repositories support users, assets, complaints, work orders, transactional lifecycle updates, and maintenance records.
+The domain model and normalized database foundation are working. JDBC repositories support users, assets, complaints, work orders, transactional lifecycle updates, and maintenance records. Work-order completion and maintenance-record creation now commit or roll back together.
 
 Next development steps:
 
-1. Coordinate the complete database-backed maintenance workflow.
-2. Replace the hard-coded demonstration with application operations.
-3. Build and connect the JavaFX desktop interface.
+1. Replace the hard-coded demonstration with application operations.
+2. Build and connect the JavaFX desktop interface.
+3. Add user-facing validation and database error handling.

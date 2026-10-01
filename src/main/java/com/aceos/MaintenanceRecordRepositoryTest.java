@@ -13,6 +13,7 @@ import com.aceos.model.WorkOrderStatus;
 import com.aceos.repository.AssetRepository;
 import com.aceos.repository.ComplaintRepository;
 import com.aceos.repository.MaintenanceRecordRepository;
+import com.aceos.repository.MaintenanceWorkflowRepository;
 import com.aceos.repository.UserRepository;
 import com.aceos.repository.WorkOrderRepository;
 
@@ -32,6 +33,9 @@ public class MaintenanceRecordRepositoryTest {
         MaintenanceRecordRepository
                 maintenanceRecordRepository =
                 new MaintenanceRecordRepository();
+        MaintenanceWorkflowRepository
+                maintenanceWorkflowRepository =
+                new MaintenanceWorkflowRepository();
 
         long uniqueValue = System.currentTimeMillis();
 
@@ -108,24 +112,29 @@ public class MaintenanceRecordRepositoryTest {
                 savedWorkOrder.getWorkOrderId()
         );
 
-        inProgressWorkOrder.complete();
-        workOrderRepository.updateLifecycle(
-                inProgressWorkOrder
-        );
+        MaintenanceRecord savedMaintenanceRecord =
+                maintenanceWorkflowRepository
+                        .completeWithMaintenanceRecord(
+                                inProgressWorkOrder,
+                                "Cleaned the filters and replaced "
+                                        + "the faulty capacitor"
+                        );
 
         WorkOrder completedWorkOrder = loadWorkOrder(
                 workOrderRepository,
                 savedWorkOrder.getWorkOrderId()
         );
 
-        MaintenanceRecord savedMaintenanceRecord =
-                maintenanceRecordRepository.save(
-                        new MaintenanceRecord(
-                                completedWorkOrder,
-                                "Cleaned the filters and replaced "
-                                        + "the faulty capacitor"
-                        )
-                );
+        require(
+                completedWorkOrder.getStatus()
+                        == WorkOrderStatus.COMPLETED,
+                "The work order and maintenance record "
+                        + "were not committed together"
+        );
+        require(
+                completedWorkOrder.getCompletedAt() != null,
+                "The completion time was not persisted"
+        );
 
         MaintenanceRecord loadedMaintenanceRecord =
                 loadMaintenanceRecord(

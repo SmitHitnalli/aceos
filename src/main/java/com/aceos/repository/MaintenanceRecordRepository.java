@@ -17,6 +17,19 @@ public class MaintenanceRecordRepository {
 
     public MaintenanceRecord save(
             MaintenanceRecord maintenanceRecord) throws SQLException {
+        try (Connection connection =
+                     DatabaseConnection.getConnection()) {
+            return insertMaintenanceRecord(
+                    connection,
+                    maintenanceRecord
+            );
+        }
+    }
+
+    static MaintenanceRecord insertMaintenanceRecord(
+            Connection connection,
+            MaintenanceRecord maintenanceRecord)
+            throws SQLException {
         requireNewMaintenanceRecord(maintenanceRecord);
 
         String sql = """
@@ -34,15 +47,11 @@ public class MaintenanceRecordRepository {
                   AND status = 'COMPLETED'
                 """;
 
-        try (
-                Connection connection =
-                        DatabaseConnection.getConnection();
-                PreparedStatement statement =
-                        connection.prepareStatement(
-                                sql,
-                                Statement.RETURN_GENERATED_KEYS
-                        )
-        ) {
+        try (PreparedStatement statement =
+                     connection.prepareStatement(
+                             sql,
+                             Statement.RETURN_GENERATED_KEYS
+                     )) {
             statement.setString(
                     1,
                     maintenanceRecord.getActionTaken()

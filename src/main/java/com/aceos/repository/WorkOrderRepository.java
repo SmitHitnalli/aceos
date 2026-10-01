@@ -423,7 +423,7 @@ public class WorkOrderRepository {
         }
     }
 
-    private static void persistCompletion(
+    static void persistCompletion(
             Connection connection,
             WorkOrder workOrder) throws SQLException {
         String sql = """
