@@ -40,6 +40,7 @@ Asset
 - JavaFX desktop application shell with section navigation
 - Database-backed user registration with clear success, validation, and database-error messages
 - Database-backed asset registration with clear success, validation, and database-error messages
+- Complaint-submission form with asset ID, requester ID, description, and priority controls
 
 ## Technology Stack
 
@@ -111,10 +112,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user-management workflow, and asset-management workflow are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, while its user and asset views call `AceOsService`, persist valid records, and display application-level failures without containing JDBC logic.
+The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user-management workflow, and asset-management workflow are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, its user and asset views call `AceOsService`, and its complaint view provides the next workflow form without containing persistence logic.
 
 Next development steps:
 
-1. Build the complaint-submission interface.
-2. Connect complaint submission to `AceOsService`.
-3. Display complaint-submission success, validation, and database errors clearly in the interface.
+1. Connect the complaint-submission interface to `AceOsService`.
+2. Display complaint-submission success, validation, and database errors clearly in the interface.
+3. Continue connecting complaint review and work-order screens to the application service.

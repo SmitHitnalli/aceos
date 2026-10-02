@@ -3,6 +3,7 @@ package com.aceos.ui;
 import com.aceos.ui.view.AssetManagementView;
 import com.aceos.service.AceOsService;
 import com.aceos.ui.view.UserManagementView;
+import com.aceos.ui.view.ComplaintManagementView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -106,9 +107,8 @@ public class AceOsApplication extends Application {
                 ),
                 createNavigationButton(
                         "Complaints",
-                        () -> showPlaceholder(
-                                "Complaint Management",
-                                "Complaint controls will be added later."
+                        () -> root.setCenter(
+                                new ComplaintManagementView()
                         )
                 ),
                 createNavigationButton(
