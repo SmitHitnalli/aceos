@@ -5,6 +5,7 @@ import com.aceos.service.AceOsService;
 import com.aceos.ui.view.UserManagementView;
 import com.aceos.ui.view.ComplaintManagementView;
 import com.aceos.ui.view.ComplaintReviewView;
+import com.aceos.ui.view.WorkOrderManagementView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -113,16 +114,15 @@ public class AceOsApplication extends Application {
                         )
                 ),
                 createNavigationButton(
-        "Review Complaints",
-        () -> root.setCenter(
-                new ComplaintReviewView(service)
-        )
-),
+                        "Review Complaints",
+                        () -> root.setCenter(
+                                new ComplaintReviewView(service)
+                        )
+                ),
                 createNavigationButton(
                         "Work Orders",
-                        () -> showPlaceholder(
-                                "Work Orders",
-                                "Work-order controls will be added later."
+                        () -> root.setCenter(
+                                new WorkOrderManagementView()
                         )
                 ),
                 createNavigationButton(
