@@ -38,7 +38,7 @@ Asset
 - Application-level input validation
 - Clear service errors for invalid workflows and database failures
 - JavaFX desktop application shell with section navigation
-- User-management registration form with name, email, and role controls
+- Database-backed user registration with clear success, validation, and database-error messages
 
 ## Technology Stack
 
@@ -110,10 +110,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, and user-management form are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history, while `AceOsApplication` launches the desktop interface and opens the user-registration view from its navigation.
+The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, and user-management workflow are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, and its user-registration view calls `AceOsService`, persists valid users, and displays validation or database failures without exposing JDBC details.
 
 Next development steps:
 
-1. Connect the user-management interface to the application service.
-2. Display service validation and database errors clearly in the interface.
-3. Add representative interface test data.
+1. Add representative interface test data.
+2. Build the asset-management interface.
+3. Continue connecting the remaining workflow screens to the application service.

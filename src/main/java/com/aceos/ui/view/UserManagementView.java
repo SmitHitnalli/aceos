@@ -1,6 +1,9 @@
 package com.aceos.ui.view;
 
+import com.aceos.model.User;
 import com.aceos.model.UserRole;
+import com.aceos.service.AceOsService;
+import com.aceos.service.AceOsServiceException;
 
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
@@ -13,7 +16,7 @@ import javafx.scene.layout.VBox;
 
 public class UserManagementView extends VBox {
 
-    public UserManagementView() {
+    public UserManagementView(AceOsService service) {
         setSpacing(20);
         setPadding(new Insets(40));
         setMaxWidth(720);
@@ -77,16 +80,15 @@ public class UserManagementView extends VBox {
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
-        statusLabel.setStyle(
-                "-fx-text-fill: #b45309;"
-        );
 
         registerButton.setOnAction(event ->
-                statusLabel.setText(
-                        "The form is working, but the user "
-                                + "has not been saved yet. "
-                                + "The service connection is "
-                                + "the next development chunk."
+                registerUser(
+                        service,
+                        nameField,
+                        emailField,
+                        roleBox,
+                        registerButton,
+                        statusLabel
                 )
         );
 
@@ -97,5 +99,47 @@ public class UserManagementView extends VBox {
                 registerButton,
                 statusLabel
         );
+    }
+
+    private void registerUser(
+            AceOsService service,
+            TextField nameField,
+            TextField emailField,
+            ComboBox<UserRole> roleBox,
+            Button registerButton,
+            Label statusLabel) {
+        registerButton.setDisable(true);
+
+        try {
+            User registeredUser = service.registerUser(
+                    nameField.getText(),
+                    emailField.getText(),
+                    roleBox.getValue()
+            );
+
+            statusLabel.setStyle(
+                    "-fx-text-fill: #15803d;"
+            );
+            statusLabel.setText(
+                    "Registered user #"
+                            + registeredUser.getUserId()
+                            + ": "
+                            + registeredUser.getName()
+            );
+
+            nameField.clear();
+            emailField.clear();
+            roleBox.getSelectionModel().clearSelection();
+            nameField.requestFocus();
+        } catch (AceOsServiceException exception) {
+            statusLabel.setStyle(
+                    "-fx-text-fill: #b91c1c;"
+            );
+            statusLabel.setText(
+                    exception.getMessage()
+            );
+        } finally {
+            registerButton.setDisable(false);
+        }
     }
 }

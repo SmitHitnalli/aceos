@@ -1,5 +1,6 @@
 package com.aceos.ui;
 
+import com.aceos.service.AceOsService;
 import com.aceos.ui.view.UserManagementView;
 
 import javafx.application.Application;
@@ -14,6 +15,9 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 public class AceOsApplication extends Application {
+
+    private final AceOsService service =
+        new AceOsService();
 
     private BorderPane root;
 
@@ -90,7 +94,7 @@ public class AceOsApplication extends Application {
                 createNavigationButton(
                         "Users",
                         () -> root.setCenter(
-                                new UserManagementView()
+                                new UserManagementView(service)
                         )
                 ),
                 createNavigationButton(
