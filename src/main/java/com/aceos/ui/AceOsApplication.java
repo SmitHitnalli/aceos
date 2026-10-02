@@ -1,5 +1,6 @@
 package com.aceos.ui;
 
+import com.aceos.ui.view.AssetManagementView;
 import com.aceos.service.AceOsService;
 import com.aceos.ui.view.UserManagementView;
 
@@ -16,8 +17,8 @@ import javafx.stage.Stage;
 
 public class AceOsApplication extends Application {
 
-    private final AceOsService service =
-        new AceOsService();
+    private final AceOsService service
+            = new AceOsService();
 
     private BorderPane root;
 
@@ -30,7 +31,7 @@ public class AceOsApplication extends Application {
         showPlaceholder(
                 "Dashboard",
                 "Choose a section from "
-                        + "the navigation menu."
+                + "the navigation menu."
         );
 
         Scene scene = new Scene(root, 1000, 650);
@@ -48,13 +49,13 @@ public class AceOsApplication extends Application {
         Label name = new Label("AceOS");
         name.setStyle(
                 "-fx-font-size: 24px;"
-                        + "-fx-font-weight: bold;"
-                        + "-fx-text-fill: white;"
+                + "-fx-font-weight: bold;"
+                + "-fx-text-fill: white;"
         );
 
         Label description = new Label(
                 "Asset, Compliance & Equipment "
-                        + "Operations System"
+                + "Operations System"
         );
         description.setStyle(
                 "-fx-text-fill: #dbeafe;"
@@ -88,7 +89,7 @@ public class AceOsApplication extends Application {
                         () -> showPlaceholder(
                                 "Dashboard",
                                 "Choose a section from "
-                                        + "the navigation menu."
+                                + "the navigation menu."
                         )
                 ),
                 createNavigationButton(
@@ -99,9 +100,8 @@ public class AceOsApplication extends Application {
                 ),
                 createNavigationButton(
                         "Assets",
-                        () -> showPlaceholder(
-                                "Asset Management",
-                                "Asset controls will be added later."
+                        () -> root.setCenter(
+                                new AssetManagementView()
                         )
                 ),
                 createNavigationButton(
@@ -147,14 +147,14 @@ public class AceOsApplication extends Application {
         Label title = new Label(titleText);
         title.setStyle(
                 "-fx-font-size: 28px;"
-                        + "-fx-font-weight: bold;"
-                        + "-fx-text-fill: #1e293b;"
+                + "-fx-font-weight: bold;"
+                + "-fx-text-fill: #1e293b;"
         );
 
         Label message = new Label(messageText);
         message.setStyle(
                 "-fx-font-size: 15px;"
-                        + "-fx-text-fill: #475569;"
+                + "-fx-text-fill: #475569;"
         );
         message.setWrapText(true);
 
