@@ -37,6 +37,7 @@ Asset
 - Database-backed application service for the complete core workflow
 - Application-level input validation
 - Clear service errors for invalid workflows and database failures
+- JavaFX desktop application shell with section navigation
 
 ## Technology Stack
 
@@ -45,7 +46,7 @@ Asset
 - MySQL 8
 - JDBC
 - MySQL Connector/J
-- JavaFX planned for the desktop interface
+- JavaFX 24.0.2
 
 ## Project Structure
 
@@ -59,6 +60,7 @@ aceos/
 │   ├── model/
 │   ├── repository/
 │   ├── service/
+│   ├── ui/
 │   └── Main.java
 ├── pom.xml
 └── README.md
@@ -107,10 +109,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, application service, input validation, and database-error translation are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history.
+The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, and JavaFX application shell are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history, while `AceOsApplication` launches the desktop interface shell.
 
 Next development steps:
 
-1. Add JavaFX and create the desktop application shell.
-2. Build the first user-management interface.
-3. Connect the interface to the application service.
+1. Build the first user-management interface.
+2. Connect the interface to the application service.
+3. Display service validation and database errors clearly in the interface.
