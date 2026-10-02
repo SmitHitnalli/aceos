@@ -1,5 +1,10 @@
 package com.aceos.ui.view;
 
+import com.aceos.model.MaintenanceRecord;
+import com.aceos.model.WorkOrder;
+import com.aceos.service.AceOsService;
+import com.aceos.service.AceOsServiceException;
+
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -12,7 +17,8 @@ import javafx.scene.layout.VBox;
 
 public class WorkOrderLifecycleView extends VBox {
 
-    public WorkOrderLifecycleView() {
+    public WorkOrderLifecycleView(
+            AceOsService service) {
         setSpacing(20);
         setPadding(new Insets(40));
         setMaxWidth(720);
@@ -92,23 +98,26 @@ public class WorkOrderLifecycleView extends VBox {
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
-        statusLabel.setStyle(
-                "-fx-text-fill: #b45309;"
-        );
 
         startButton.setOnAction(event ->
-                statusLabel.setText(
-                        "The start control works, "
-                                + "but the status has not "
-                                + "been saved yet."
+                startWork(
+                        service,
+                        workOrderIdField,
+                        actionTakenField,
+                        startButton,
+                        completeButton,
+                        statusLabel
                 )
         );
 
         completeButton.setOnAction(event ->
-                statusLabel.setText(
-                        "The completion control works, "
-                                + "but the result has not "
-                                + "been saved yet."
+                completeWork(
+                        service,
+                        workOrderIdField,
+                        actionTakenField,
+                        startButton,
+                        completeButton,
+                        statusLabel
                 )
         );
 
@@ -120,5 +129,160 @@ public class WorkOrderLifecycleView extends VBox {
                 actions,
                 statusLabel
         );
+    }
+
+    private void startWork(
+            AceOsService service,
+            TextField workOrderIdField,
+            TextArea actionTakenField,
+            Button startButton,
+            Button completeButton,
+            Label statusLabel) {
+        setButtonsDisabled(
+                startButton,
+                completeButton,
+                true
+        );
+
+        try {
+            int workOrderId = parseId(
+                    workOrderIdField.getText()
+            );
+
+            WorkOrder startedWorkOrder =
+                    service.startWorkOrder(
+                            workOrderId
+                    );
+
+            statusLabel.setStyle(
+                    "-fx-text-fill: #15803d;"
+            );
+            statusLabel.setText(
+                    "Work order #"
+                            + startedWorkOrder.getWorkOrderId()
+                            + " is now "
+                            + startedWorkOrder.getStatus()
+                            + "; asset "
+                            + startedWorkOrder
+                                    .getComplaint()
+                                    .getAsset()
+                                    .getAssetCode()
+                            + " is "
+                            + startedWorkOrder
+                                    .getComplaint()
+                                    .getAsset()
+                                    .getStatus()
+            );
+
+            actionTakenField.requestFocus();
+        } catch (AceOsServiceException exception) {
+            showError(
+                    statusLabel,
+                    exception
+            );
+        } finally {
+            setButtonsDisabled(
+                    startButton,
+                    completeButton,
+                    false
+            );
+        }
+    }
+
+    private void completeWork(
+            AceOsService service,
+            TextField workOrderIdField,
+            TextArea actionTakenField,
+            Button startButton,
+            Button completeButton,
+            Label statusLabel) {
+        setButtonsDisabled(
+                startButton,
+                completeButton,
+                true
+        );
+
+        try {
+            int workOrderId = parseId(
+                    workOrderIdField.getText()
+            );
+
+            MaintenanceRecord maintenanceRecord =
+                    service.completeWorkOrder(
+                            workOrderId,
+                            actionTakenField.getText()
+                    );
+
+            statusLabel.setStyle(
+                    "-fx-text-fill: #15803d;"
+            );
+            statusLabel.setText(
+                    "Completed work order #"
+                            + maintenanceRecord
+                                    .getWorkOrder()
+                                    .getWorkOrderId()
+                            + " and created maintenance record #"
+                            + maintenanceRecord
+                                    .getMaintenanceRecordId()
+                            + " ("
+                            + maintenanceRecord
+                                    .getWorkOrder()
+                                    .getStatus()
+                            + ")"
+            );
+
+            workOrderIdField.clear();
+            actionTakenField.clear();
+            workOrderIdField.requestFocus();
+        } catch (AceOsServiceException exception) {
+            showError(
+                    statusLabel,
+                    exception
+            );
+        } finally {
+            setButtonsDisabled(
+                    startButton,
+                    completeButton,
+                    false
+            );
+        }
+    }
+
+    private int parseId(
+            String value)
+            throws AceOsServiceException {
+        if (value == null || value.isBlank()) {
+            throw new AceOsServiceException(
+                    "Work order ID is required"
+            );
+        }
+
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException exception) {
+            throw new AceOsServiceException(
+                    "Work order ID must be a whole number",
+                    exception
+            );
+        }
+    }
+
+    private void showError(
+            Label statusLabel,
+            AceOsServiceException exception) {
+        statusLabel.setStyle(
+                "-fx-text-fill: #b91c1c;"
+        );
+        statusLabel.setText(
+                exception.getMessage()
+        );
+    }
+
+    private void setButtonsDisabled(
+            Button startButton,
+            Button completeButton,
+            boolean disabled) {
+        startButton.setDisable(disabled);
+        completeButton.setDisable(disabled);
     }
 }

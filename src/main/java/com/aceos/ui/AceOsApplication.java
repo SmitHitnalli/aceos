@@ -129,7 +129,7 @@ public class AceOsApplication extends Application {
                 createNavigationButton(
                         "Maintenance",
                         () -> root.setCenter(
-                                new WorkOrderLifecycleView()
+                                new WorkOrderLifecycleView(service)
                         )
                 )
         );
