@@ -44,7 +44,7 @@ Asset
 - Database-backed administrative complaint acceptance and rejection with workflow feedback
 - Transactional work-order assignment with technician-role and complaint-state feedback
 - Database-backed work-order start and completion with lifecycle feedback and maintenance-record creation
-- Administrative maintenance-verification form with work-order and administrator ID controls
+- Database-backed administrative maintenance verification with role, state, and final workflow feedback
 
 ## Technology Stack
 
@@ -116,10 +116,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user management, asset management, complaint handling, transactional work-order assignment, and work-order start and completion controls are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, its completed views call `AceOsService`, its maintenance view starts and completes work orders, and an administrative verification form is ready for service integration.
+The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, and final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset.
 
 Next development steps:
 
-1. Connect administrative verification to `AceOsService`.
-2. Display verification success, validation, and workflow errors clearly in the interface.
-3. Verify the final work-order, complaint, and asset states through JavaFX.
+1. Review and polish the completed core prototype for presentation.
+2. Add useful record lookup or list views to reduce manual ID lookup.
+3. Extend the prototype with preventive maintenance scheduling and inspection tracking.

@@ -136,7 +136,7 @@ public class AceOsApplication extends Application {
                 createNavigationButton(
                         "Verify Maintenance",
                         () -> root.setCenter(
-                                new WorkOrderVerificationView()
+                                new WorkOrderVerificationView(service)
                         )
                 )
         );

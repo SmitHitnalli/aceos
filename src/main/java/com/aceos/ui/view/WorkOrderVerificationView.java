@@ -1,5 +1,9 @@
 package com.aceos.ui.view;
 
+import com.aceos.model.WorkOrder;
+import com.aceos.service.AceOsService;
+import com.aceos.service.AceOsServiceException;
+
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -10,7 +14,8 @@ import javafx.scene.layout.VBox;
 
 public class WorkOrderVerificationView extends VBox {
 
-    public WorkOrderVerificationView() {
+    public WorkOrderVerificationView(
+            AceOsService service) {
         setSpacing(20);
         setPadding(new Insets(40));
         setMaxWidth(720);
@@ -86,15 +91,14 @@ public class WorkOrderVerificationView extends VBox {
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
-        statusLabel.setStyle(
-                "-fx-text-fill: #b45309;"
-        );
 
         verifyButton.setOnAction(event ->
-                statusLabel.setText(
-                        "The verification control works, "
-                                + "but the result has not "
-                                + "been saved yet."
+                verifyWorkOrder(
+                        service,
+                        workOrderIdField,
+                        administratorIdField,
+                        verifyButton,
+                        statusLabel
                 )
         );
 
@@ -106,5 +110,94 @@ public class WorkOrderVerificationView extends VBox {
                 verifyButton,
                 statusLabel
         );
+    }
+
+    private void verifyWorkOrder(
+            AceOsService service,
+            TextField workOrderIdField,
+            TextField administratorIdField,
+            Button verifyButton,
+            Label statusLabel) {
+        verifyButton.setDisable(true);
+
+        try {
+            int workOrderId = parseId(
+                    workOrderIdField.getText(),
+                    "Work order"
+            );
+            int administratorId = parseId(
+                    administratorIdField.getText(),
+                    "Administrator"
+            );
+
+            WorkOrder verifiedWorkOrder =
+                    service.verifyWorkOrder(
+                            workOrderId,
+                            administratorId
+                    );
+
+            statusLabel.setStyle(
+                    "-fx-text-fill: #15803d;"
+            );
+            statusLabel.setText(
+                    "Work order #"
+                            + verifiedWorkOrder
+                                    .getWorkOrderId()
+                            + " is "
+                            + verifiedWorkOrder.getStatus()
+                            + "; complaint #"
+                            + verifiedWorkOrder
+                                    .getComplaint()
+                                    .getComplaintId()
+                            + " is "
+                            + verifiedWorkOrder
+                                    .getComplaint()
+                                    .getStatus()
+                            + "; asset "
+                            + verifiedWorkOrder
+                                    .getComplaint()
+                                    .getAsset()
+                                    .getAssetCode()
+                            + " is "
+                            + verifiedWorkOrder
+                                    .getComplaint()
+                                    .getAsset()
+                                    .getStatus()
+            );
+
+            workOrderIdField.clear();
+            administratorIdField.clear();
+            workOrderIdField.requestFocus();
+        } catch (AceOsServiceException exception) {
+            statusLabel.setStyle(
+                    "-fx-text-fill: #b91c1c;"
+            );
+            statusLabel.setText(
+                    exception.getMessage()
+            );
+        } finally {
+            verifyButton.setDisable(false);
+        }
+    }
+
+    private int parseId(
+            String value,
+            String entityName)
+            throws AceOsServiceException {
+        if (value == null || value.isBlank()) {
+            throw new AceOsServiceException(
+                    entityName + " ID is required"
+            );
+        }
+
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException exception) {
+            throw new AceOsServiceException(
+                    entityName
+                            + " ID must be a whole number",
+                    exception
+            );
+        }
     }
 }
