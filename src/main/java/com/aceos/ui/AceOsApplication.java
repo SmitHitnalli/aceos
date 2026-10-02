@@ -115,7 +115,7 @@ public class AceOsApplication extends Application {
                 createNavigationButton(
         "Review Complaints",
         () -> root.setCenter(
-                new ComplaintReviewView()
+                new ComplaintReviewView(service)
         )
 ),
                 createNavigationButton(

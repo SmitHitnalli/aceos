@@ -41,7 +41,7 @@ Asset
 - Database-backed user registration with clear success, validation, and database-error messages
 - Database-backed asset registration with clear success, validation, and database-error messages
 - Database-backed complaint submission with ID parsing, role validation, and clear service feedback
-- Administrative complaint-review form with acceptance and rejection controls
+- Database-backed administrative complaint acceptance and rejection with workflow feedback
 
 ## Technology Stack
 
@@ -113,10 +113,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user-management workflow, asset-management workflow, and complaint-submission workflow are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, its user, asset, and complaint-submission views call `AceOsService`, and its administrative review view provides acceptance and rejection controls without containing persistence logic.
+The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user-management workflow, asset-management workflow, complaint submission, and administrative complaint review are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, and its views call `AceOsService` to persist valid records and workflow transitions without containing JDBC logic.
 
 Next development steps:
 
-1. Connect complaint acceptance and rejection to `AceOsService`.
-2. Display complaint-review success, validation, and workflow errors clearly in the interface.
-3. Build the work-order assignment interface.
+1. Build the work-order assignment interface.
+2. Connect assignment to `AceOsService` with transactional workflow feedback.
+3. Build work-order lifecycle controls for starting and completing maintenance.

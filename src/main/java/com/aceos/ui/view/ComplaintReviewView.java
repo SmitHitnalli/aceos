@@ -1,5 +1,9 @@
 package com.aceos.ui.view;
 
+import com.aceos.model.Complaint;
+import com.aceos.service.AceOsService;
+import com.aceos.service.AceOsServiceException;
+
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -11,7 +15,8 @@ import javafx.scene.layout.VBox;
 
 public class ComplaintReviewView extends VBox {
 
-    public ComplaintReviewView() {
+    public ComplaintReviewView(
+            AceOsService service) {
         setSpacing(20);
         setPadding(new Insets(40));
         setMaxWidth(720);
@@ -86,23 +91,28 @@ public class ComplaintReviewView extends VBox {
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
-        statusLabel.setStyle(
-                "-fx-text-fill: #b45309;"
-        );
 
         acceptButton.setOnAction(event ->
-                statusLabel.setText(
-                        "The acceptance control works, "
-                                + "but the review has not "
-                                + "been saved yet."
+                reviewComplaint(
+                        service,
+                        complaintIdField,
+                        administratorIdField,
+                        acceptButton,
+                        rejectButton,
+                        statusLabel,
+                        true
                 )
         );
 
         rejectButton.setOnAction(event ->
-                statusLabel.setText(
-                        "The rejection control works, "
-                                + "but the review has not "
-                                + "been saved yet."
+                reviewComplaint(
+                        service,
+                        complaintIdField,
+                        administratorIdField,
+                        acceptButton,
+                        rejectButton,
+                        statusLabel,
+                        false
                 )
         );
 
@@ -114,5 +124,89 @@ public class ComplaintReviewView extends VBox {
                 actions,
                 statusLabel
         );
+    }
+
+    private void reviewComplaint(
+            AceOsService service,
+            TextField complaintIdField,
+            TextField administratorIdField,
+            Button acceptButton,
+            Button rejectButton,
+            Label statusLabel,
+            boolean accept) {
+        acceptButton.setDisable(true);
+        rejectButton.setDisable(true);
+
+        try {
+            int complaintId = parseId(
+                    complaintIdField.getText(),
+                    "Complaint"
+            );
+            int administratorId = parseId(
+                    administratorIdField.getText(),
+                    "Administrator"
+            );
+
+            Complaint reviewedComplaint;
+
+            if (accept) {
+                reviewedComplaint =
+                        service.acceptComplaint(
+                                complaintId,
+                                administratorId
+                        );
+            } else {
+                reviewedComplaint =
+                        service.rejectComplaint(
+                                complaintId,
+                                administratorId
+                        );
+            }
+
+            statusLabel.setStyle(
+                    "-fx-text-fill: #15803d;"
+            );
+            statusLabel.setText(
+                    "Complaint #"
+                            + reviewedComplaint.getComplaintId()
+                            + " is now "
+                            + reviewedComplaint.getStatus()
+            );
+
+            complaintIdField.clear();
+            administratorIdField.clear();
+            complaintIdField.requestFocus();
+        } catch (AceOsServiceException exception) {
+            statusLabel.setStyle(
+                    "-fx-text-fill: #b91c1c;"
+            );
+            statusLabel.setText(
+                    exception.getMessage()
+            );
+        } finally {
+            acceptButton.setDisable(false);
+            rejectButton.setDisable(false);
+        }
+    }
+
+    private int parseId(
+            String value,
+            String entityName)
+            throws AceOsServiceException {
+        if (value == null || value.isBlank()) {
+            throw new AceOsServiceException(
+                    entityName + " ID is required"
+            );
+        }
+
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException exception) {
+            throw new AceOsServiceException(
+                    entityName
+                            + " ID must be a whole number",
+                    exception
+            );
+        }
     }
 }
