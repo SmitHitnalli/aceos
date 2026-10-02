@@ -108,7 +108,7 @@ public class AceOsApplication extends Application {
                 createNavigationButton(
                         "Complaints",
                         () -> root.setCenter(
-                                new ComplaintManagementView()
+                                new ComplaintManagementView(service)
                         )
                 ),
                 createNavigationButton(

@@ -1,6 +1,9 @@
 package com.aceos.ui.view;
 
+import com.aceos.model.Complaint;
 import com.aceos.model.ComplaintPriority;
+import com.aceos.service.AceOsService;
+import com.aceos.service.AceOsServiceException;
 
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
@@ -14,7 +17,8 @@ import javafx.scene.layout.VBox;
 
 public class ComplaintManagementView extends VBox {
 
-    public ComplaintManagementView() {
+    public ComplaintManagementView(
+            AceOsService service) {
         setSpacing(20);
         setPadding(new Insets(40));
         setMaxWidth(720);
@@ -102,16 +106,16 @@ public class ComplaintManagementView extends VBox {
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
-        statusLabel.setStyle(
-                "-fx-text-fill: #b45309;"
-        );
 
         submitButton.setOnAction(event ->
-                statusLabel.setText(
-                        "The form is working, but the "
-                                + "complaint has not been saved yet. "
-                                + "The service connection is "
-                                + "the next development chunk."
+                submitComplaint(
+                        service,
+                        assetIdField,
+                        requesterIdField,
+                        complaintDescriptionField,
+                        priorityBox,
+                        submitButton,
+                        statusLabel
                 )
         );
 
@@ -122,5 +126,90 @@ public class ComplaintManagementView extends VBox {
                 submitButton,
                 statusLabel
         );
+    }
+
+    private void submitComplaint(
+            AceOsService service,
+            TextField assetIdField,
+            TextField requesterIdField,
+            TextArea complaintDescriptionField,
+            ComboBox<ComplaintPriority> priorityBox,
+            Button submitButton,
+            Label statusLabel) {
+        submitButton.setDisable(true);
+
+        try {
+            int assetId = parseId(
+                    assetIdField.getText(),
+                    "Asset"
+            );
+            int requesterId = parseId(
+                    requesterIdField.getText(),
+                    "Requester"
+            );
+
+            Complaint submittedComplaint =
+                    service.submitComplaint(
+                            assetId,
+                            requesterId,
+                            complaintDescriptionField.getText(),
+                            priorityBox.getValue()
+                    );
+
+            statusLabel.setStyle(
+                    "-fx-text-fill: #15803d;"
+            );
+            statusLabel.setText(
+                    "Submitted complaint #"
+                            + submittedComplaint.getComplaintId()
+                            + " for asset "
+                            + submittedComplaint
+                                    .getAsset()
+                                    .getAssetCode()
+                            + " ("
+                            + submittedComplaint.getPriority()
+                            + ", "
+                            + submittedComplaint.getStatus()
+                            + ")"
+            );
+
+            assetIdField.clear();
+            requesterIdField.clear();
+            complaintDescriptionField.clear();
+            priorityBox
+                    .getSelectionModel()
+                    .clearSelection();
+            assetIdField.requestFocus();
+        } catch (AceOsServiceException exception) {
+            statusLabel.setStyle(
+                    "-fx-text-fill: #b91c1c;"
+            );
+            statusLabel.setText(
+                    exception.getMessage()
+            );
+        } finally {
+            submitButton.setDisable(false);
+        }
+    }
+
+    private int parseId(
+            String value,
+            String entityName)
+            throws AceOsServiceException {
+        if (value == null || value.isBlank()) {
+            throw new AceOsServiceException(
+                    entityName + " ID is required"
+            );
+        }
+
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException exception) {
+            throw new AceOsServiceException(
+                    entityName
+                            + " ID must be a whole number",
+                    exception
+            );
+        }
     }
 }
