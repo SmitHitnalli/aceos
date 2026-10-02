@@ -43,6 +43,7 @@ Asset
 - Database-backed complaint submission with ID parsing, role validation, and clear service feedback
 - Database-backed administrative complaint acceptance and rejection with workflow feedback
 - Transactional work-order assignment with technician-role and complaint-state feedback
+- Work-order lifecycle form with start and completion controls
 
 ## Technology Stack
 
@@ -114,10 +115,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user management, asset management, complaint submission, administrative review, and transactional work-order assignment are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, and its views call `AceOsService` to persist valid records and coordinated workflow transitions without containing JDBC logic.
+The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user management, asset management, complaint handling, and transactional work-order assignment are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, its completed views call `AceOsService`, and its maintenance view provides start and completion controls without containing persistence logic.
 
 Next development steps:
 
-1. Build work-order start and completion controls.
-2. Connect lifecycle actions to `AceOsService` with clear status feedback.
+1. Connect work-order start and completion to `AceOsService`.
+2. Display lifecycle success, validation, and workflow errors clearly in the interface.
 3. Add administrative work-order verification controls.

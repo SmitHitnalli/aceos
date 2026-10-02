@@ -6,6 +6,7 @@ import com.aceos.ui.view.UserManagementView;
 import com.aceos.ui.view.ComplaintManagementView;
 import com.aceos.ui.view.ComplaintReviewView;
 import com.aceos.ui.view.WorkOrderManagementView;
+import com.aceos.ui.view.WorkOrderLifecycleView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -127,9 +128,8 @@ public class AceOsApplication extends Application {
                 ),
                 createNavigationButton(
                         "Maintenance",
-                        () -> showPlaceholder(
-                                "Maintenance History",
-                                "Maintenance history will be added later."
+                        () -> root.setCenter(
+                                new WorkOrderLifecycleView()
                         )
                 )
         );
