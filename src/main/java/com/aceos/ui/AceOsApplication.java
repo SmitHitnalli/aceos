@@ -1,5 +1,7 @@
 package com.aceos.ui;
 
+import com.aceos.ui.view.UserManagementView;
+
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -13,20 +15,18 @@ import javafx.stage.Stage;
 
 public class AceOsApplication extends Application {
 
+    private BorderPane root;
+
     @Override
     public void start(Stage primaryStage) {
-        Label pageTitle = new Label("Dashboard");
-        Label pageMessage = new Label(
-                "Choose a section from the navigation menu."
-        );
-
-        BorderPane root = new BorderPane();
+        root = new BorderPane();
         root.setTop(createHeader());
-        root.setLeft(
-                createNavigation(pageTitle, pageMessage)
-        );
-        root.setCenter(
-                createContent(pageTitle, pageMessage)
+        root.setLeft(createNavigation());
+
+        showPlaceholder(
+                "Dashboard",
+                "Choose a section from "
+                        + "the navigation menu."
         );
 
         Scene scene = new Scene(root, 1000, 650);
@@ -68,9 +68,7 @@ public class AceOsApplication extends Application {
         return header;
     }
 
-    private VBox createNavigation(
-            Label pageTitle,
-            Label pageMessage) {
+    private VBox createNavigation() {
         VBox navigation = new VBox(10);
         navigation.setPadding(
                 new Insets(24, 16, 24, 16)
@@ -83,75 +81,86 @@ public class AceOsApplication extends Application {
         navigation.getChildren().addAll(
                 createNavigationButton(
                         "Dashboard",
-                        "Dashboard",
-                        "Choose a section from "
-                                + "the navigation menu.",
-                        pageTitle,
-                        pageMessage
+                        () -> showPlaceholder(
+                                "Dashboard",
+                                "Choose a section from "
+                                        + "the navigation menu."
+                        )
                 ),
                 createNavigationButton(
                         "Users",
-                        "User Management",
-                        "User registration will be "
-                                + "built in the next chunk.",
-                        pageTitle,
-                        pageMessage
+                        () -> root.setCenter(
+                                new UserManagementView()
+                        )
                 ),
                 createNavigationButton(
                         "Assets",
-                        "Asset Management",
-                        "Asset controls will be added later.",
-                        pageTitle,
-                        pageMessage
+                        () -> showPlaceholder(
+                                "Asset Management",
+                                "Asset controls will be added later."
+                        )
                 ),
                 createNavigationButton(
                         "Complaints",
-                        "Complaint Management",
-                        "Complaint controls will be added later.",
-                        pageTitle,
-                        pageMessage
+                        () -> showPlaceholder(
+                                "Complaint Management",
+                                "Complaint controls will be added later."
+                        )
                 ),
                 createNavigationButton(
                         "Work Orders",
-                        "Work Orders",
-                        "Work-order controls will be added later.",
-                        pageTitle,
-                        pageMessage
+                        () -> showPlaceholder(
+                                "Work Orders",
+                                "Work-order controls will be added later."
+                        )
                 ),
                 createNavigationButton(
                         "Maintenance",
-                        "Maintenance History",
-                        "Maintenance history will be added later.",
-                        pageTitle,
-                        pageMessage
+                        () -> showPlaceholder(
+                                "Maintenance History",
+                                "Maintenance history will be added later."
+                        )
                 )
         );
 
         return navigation;
     }
 
-    private VBox createContent(
-            Label pageTitle,
-            Label pageMessage) {
-        pageTitle.setStyle(
+    private void showPlaceholder(
+            String titleText,
+            String messageText) {
+        root.setCenter(
+                createPlaceholder(
+                        titleText,
+                        messageText
+                )
+        );
+    }
+
+    private VBox createPlaceholder(
+            String titleText,
+            String messageText) {
+        Label title = new Label(titleText);
+        title.setStyle(
                 "-fx-font-size: 28px;"
                         + "-fx-font-weight: bold;"
                         + "-fx-text-fill: #1e293b;"
         );
 
-        pageMessage.setStyle(
+        Label message = new Label(messageText);
+        message.setStyle(
                 "-fx-font-size: 15px;"
                         + "-fx-text-fill: #475569;"
         );
-        pageMessage.setWrapText(true);
+        message.setWrapText(true);
 
         VBox content = new VBox(
                 14,
-                pageTitle,
-                pageMessage
+                title,
+                message
         );
         content.setPadding(
-                new Insets(40, 40, 40, 40)
+                new Insets(40)
         );
 
         return content;
@@ -159,18 +168,12 @@ public class AceOsApplication extends Application {
 
     private Button createNavigationButton(
             String buttonText,
-            String title,
-            String message,
-            Label pageTitle,
-            Label pageMessage) {
+            Runnable action) {
         Button button = new Button(buttonText);
         button.setMaxWidth(Double.MAX_VALUE);
         button.setMinHeight(42);
 
-        button.setOnAction(event -> {
-            pageTitle.setText(title);
-            pageMessage.setText(message);
-        });
+        button.setOnAction(event -> action.run());
 
         return button;
     }
