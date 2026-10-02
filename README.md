@@ -41,6 +41,7 @@ Asset
 - Database-backed user registration with clear success, validation, and database-error messages
 - Database-backed asset registration with clear success, validation, and database-error messages
 - Database-backed complaint submission with ID parsing, role validation, and clear service feedback
+- Administrative complaint-review form with acceptance and rejection controls
 
 ## Technology Stack
 
@@ -112,10 +113,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user-management workflow, asset-management workflow, and complaint-submission workflow are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, and its user, asset, and complaint views call `AceOsService`, persist valid records, and display application-level failures without containing JDBC logic.
+The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user-management workflow, asset-management workflow, and complaint-submission workflow are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, its user, asset, and complaint-submission views call `AceOsService`, and its administrative review view provides acceptance and rejection controls without containing persistence logic.
 
 Next development steps:
 
-1. Build the complaint-review interface for administrative acceptance and rejection.
-2. Connect complaint review to `AceOsService` with clear workflow feedback.
+1. Connect complaint acceptance and rejection to `AceOsService`.
+2. Display complaint-review success, validation, and workflow errors clearly in the interface.
 3. Build the work-order assignment interface.
