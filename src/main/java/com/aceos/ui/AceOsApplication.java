@@ -122,7 +122,7 @@ public class AceOsApplication extends Application {
                 createNavigationButton(
                         "Work Orders",
                         () -> root.setCenter(
-                                new WorkOrderManagementView()
+                                new WorkOrderManagementView(service)
                         )
                 ),
                 createNavigationButton(

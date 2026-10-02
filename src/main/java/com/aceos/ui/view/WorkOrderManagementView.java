@@ -1,5 +1,9 @@
 package com.aceos.ui.view;
 
+import com.aceos.model.WorkOrder;
+import com.aceos.service.AceOsService;
+import com.aceos.service.AceOsServiceException;
+
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -10,7 +14,8 @@ import javafx.scene.layout.VBox;
 
 public class WorkOrderManagementView extends VBox {
 
-    public WorkOrderManagementView() {
+    public WorkOrderManagementView(
+            AceOsService service) {
         setSpacing(20);
         setPadding(new Insets(40));
         setMaxWidth(720);
@@ -75,15 +80,14 @@ public class WorkOrderManagementView extends VBox {
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
-        statusLabel.setStyle(
-                "-fx-text-fill: #b45309;"
-        );
 
         assignButton.setOnAction(event ->
-                statusLabel.setText(
-                        "The assignment form works, "
-                                + "but the work order has "
-                                + "not been saved yet."
+                assignWorkOrder(
+                        service,
+                        complaintIdField,
+                        technicianIdField,
+                        assignButton,
+                        statusLabel
                 )
         );
 
@@ -95,5 +99,84 @@ public class WorkOrderManagementView extends VBox {
                 assignButton,
                 statusLabel
         );
+    }
+
+    private void assignWorkOrder(
+            AceOsService service,
+            TextField complaintIdField,
+            TextField technicianIdField,
+            Button assignButton,
+            Label statusLabel) {
+        assignButton.setDisable(true);
+
+        try {
+            int complaintId = parseId(
+                    complaintIdField.getText(),
+                    "Complaint"
+            );
+            int technicianId = parseId(
+                    technicianIdField.getText(),
+                    "Technician"
+            );
+
+            WorkOrder workOrder =
+                    service.assignWorkOrder(
+                            complaintId,
+                            technicianId
+                    );
+
+            statusLabel.setStyle(
+                    "-fx-text-fill: #15803d;"
+            );
+            statusLabel.setText(
+                    "Created work order #"
+                            + workOrder.getWorkOrderId()
+                            + " for complaint #"
+                            + workOrder
+                                    .getComplaint()
+                                    .getComplaintId()
+                            + ", assigned to "
+                            + workOrder
+                                    .getTechnician()
+                                    .getName()
+                            + " ("
+                            + workOrder.getStatus()
+                            + ")"
+            );
+
+            complaintIdField.clear();
+            technicianIdField.clear();
+            complaintIdField.requestFocus();
+        } catch (AceOsServiceException exception) {
+            statusLabel.setStyle(
+                    "-fx-text-fill: #b91c1c;"
+            );
+            statusLabel.setText(
+                    exception.getMessage()
+            );
+        } finally {
+            assignButton.setDisable(false);
+        }
+    }
+
+    private int parseId(
+            String value,
+            String entityName)
+            throws AceOsServiceException {
+        if (value == null || value.isBlank()) {
+            throw new AceOsServiceException(
+                    entityName + " ID is required"
+            );
+        }
+
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException exception) {
+            throw new AceOsServiceException(
+                    entityName
+                            + " ID must be a whole number",
+                    exception
+            );
+        }
     }
 }
