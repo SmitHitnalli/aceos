@@ -44,6 +44,7 @@ Asset
 - Database-backed administrative complaint acceptance and rejection with workflow feedback
 - Transactional work-order assignment with technician-role and complaint-state feedback
 - Database-backed work-order start and completion with lifecycle feedback and maintenance-record creation
+- Administrative maintenance-verification form with work-order and administrator ID controls
 
 ## Technology Stack
 
@@ -115,10 +116,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user management, asset management, complaint handling, transactional work-order assignment, and work-order start and completion controls are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, its completed views call `AceOsService`, and its maintenance view starts and completes work orders while keeping persistence logic in the service layer.
+The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user management, asset management, complaint handling, transactional work-order assignment, and work-order start and completion controls are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, its completed views call `AceOsService`, its maintenance view starts and completes work orders, and an administrative verification form is ready for service integration.
 
 Next development steps:
 
-1. Build administrative work-order verification controls.
-2. Connect verification to `AceOsService`.
-3. Display verification success, validation, and workflow errors clearly in the interface.
+1. Connect administrative verification to `AceOsService`.
+2. Display verification success, validation, and workflow errors clearly in the interface.
+3. Verify the final work-order, complaint, and asset states through JavaFX.

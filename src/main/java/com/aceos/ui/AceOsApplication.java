@@ -7,6 +7,7 @@ import com.aceos.ui.view.ComplaintManagementView;
 import com.aceos.ui.view.ComplaintReviewView;
 import com.aceos.ui.view.WorkOrderManagementView;
 import com.aceos.ui.view.WorkOrderLifecycleView;
+import com.aceos.ui.view.WorkOrderVerificationView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -130,6 +131,12 @@ public class AceOsApplication extends Application {
                         "Maintenance",
                         () -> root.setCenter(
                                 new WorkOrderLifecycleView(service)
+                        )
+                ),
+                createNavigationButton(
+                        "Verify Maintenance",
+                        () -> root.setCenter(
+                                new WorkOrderVerificationView()
                         )
                 )
         );
