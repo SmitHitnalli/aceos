@@ -101,7 +101,7 @@ public class AceOsApplication extends Application {
                 createNavigationButton(
                         "Assets",
                         () -> root.setCenter(
-                                new AssetManagementView()
+                                new AssetManagementView(service)
                         )
                 ),
                 createNavigationButton(

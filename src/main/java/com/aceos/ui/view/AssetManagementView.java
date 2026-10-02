@@ -1,5 +1,9 @@
 package com.aceos.ui.view;
 
+import com.aceos.model.Asset;
+import com.aceos.service.AceOsService;
+import com.aceos.service.AceOsServiceException;
+
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -10,7 +14,7 @@ import javafx.scene.layout.VBox;
 
 public class AssetManagementView extends VBox {
 
-    public AssetManagementView() {
+    public AssetManagementView(AceOsService service) {
         setSpacing(20);
         setPadding(new Insets(40));
         setMaxWidth(720);
@@ -90,16 +94,16 @@ public class AssetManagementView extends VBox {
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
-        statusLabel.setStyle(
-                "-fx-text-fill: #b45309;"
-        );
 
         registerButton.setOnAction(event ->
-                statusLabel.setText(
-                        "The form is working, but the asset "
-                                + "has not been saved yet. "
-                                + "The service connection is "
-                                + "the next development chunk."
+                registerAsset(
+                        service,
+                        assetCodeField,
+                        nameField,
+                        categoryField,
+                        locationField,
+                        registerButton,
+                        statusLabel
                 )
         );
 
@@ -110,5 +114,55 @@ public class AssetManagementView extends VBox {
                 registerButton,
                 statusLabel
         );
+    }
+
+    private void registerAsset(
+            AceOsService service,
+            TextField assetCodeField,
+            TextField nameField,
+            TextField categoryField,
+            TextField locationField,
+            Button registerButton,
+            Label statusLabel) {
+        registerButton.setDisable(true);
+
+        try {
+            Asset registeredAsset = service.registerAsset(
+                    assetCodeField.getText(),
+                    nameField.getText(),
+                    categoryField.getText(),
+                    locationField.getText()
+            );
+
+            statusLabel.setStyle(
+                    "-fx-text-fill: #15803d;"
+            );
+            statusLabel.setText(
+                    "Registered asset #"
+                            + registeredAsset.getAssetId()
+                            + ": "
+                            + registeredAsset.getAssetCode()
+                            + " - "
+                            + registeredAsset.getName()
+                            + " ("
+                            + registeredAsset.getStatus()
+                            + ")"
+            );
+
+            assetCodeField.clear();
+            nameField.clear();
+            categoryField.clear();
+            locationField.clear();
+            assetCodeField.requestFocus();
+        } catch (AceOsServiceException exception) {
+            statusLabel.setStyle(
+                    "-fx-text-fill: #b91c1c;"
+            );
+            statusLabel.setText(
+                    exception.getMessage()
+            );
+        } finally {
+            registerButton.setDisable(false);
+        }
     }
 }

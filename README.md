@@ -39,7 +39,7 @@ Asset
 - Clear service errors for invalid workflows and database failures
 - JavaFX desktop application shell with section navigation
 - Database-backed user registration with clear success, validation, and database-error messages
-- Asset-management registration form with code, name, category, and location controls
+- Database-backed asset registration with clear success, validation, and database-error messages
 
 ## Technology Stack
 
@@ -111,10 +111,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, and user-management workflow are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, its user-registration view calls `AceOsService`, and its asset-management view provides the next registration form without containing persistence logic.
+The domain model, normalized database foundation, JDBC repositories, application service, input validation, database-error translation, JavaFX application shell, user-management workflow, and asset-management workflow are working. The database-backed `Main` program completes the core workflow from complaint submission through verified maintenance history. `AceOsApplication` launches the desktop interface, while its user and asset views call `AceOsService`, persist valid records, and display application-level failures without containing JDBC logic.
 
 Next development steps:
 
-1. Connect the asset-management interface to `AceOsService`.
-2. Display asset-registration success, validation, and database errors clearly in the interface.
-3. Continue connecting the remaining workflow screens to the application service.
+1. Build the complaint-submission interface.
+2. Connect complaint submission to `AceOsService`.
+3. Display complaint-submission success, validation, and database errors clearly in the interface.
