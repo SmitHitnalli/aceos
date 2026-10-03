@@ -21,19 +21,22 @@ import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class WorkOrderRepository {
 
     public WorkOrder save(
             WorkOrder workOrder) throws SQLException {
         requireNewWorkOrder(workOrder);
 
-        try (Connection connection =
-                     DatabaseConnection.getConnection()) {
+        try (Connection connection
+                = DatabaseConnection.getConnection()) {
             connection.setAutoCommit(false);
 
             try {
-                int generatedId =
-                        insertWorkOrder(connection, workOrder);
+                int generatedId
+                        = insertWorkOrder(connection, workOrder);
 
                 updateComplaintStatus(
                         connection,
@@ -68,25 +71,25 @@ public class WorkOrderRepository {
             WorkOrder workOrder) throws SQLException {
         requirePersistedLifecycleChange(workOrder);
 
-        try (Connection connection =
-                     DatabaseConnection.getConnection()) {
+        try (Connection connection
+                = DatabaseConnection.getConnection()) {
             connection.setAutoCommit(false);
 
             try {
                 switch (workOrder.getStatus()) {
                     case IN_PROGRESS ->
-                            persistStart(connection, workOrder);
+                        persistStart(connection, workOrder);
 
                     case COMPLETED ->
-                            persistCompletion(connection, workOrder);
+                        persistCompletion(connection, workOrder);
 
                     case VERIFIED ->
-                            persistVerification(connection, workOrder);
+                        persistVerification(connection, workOrder);
 
                     default ->
-                            throw new IllegalArgumentException(
-                                    "The work order has no lifecycle change to persist"
-                            );
+                        throw new IllegalArgumentException(
+                                "The work order has no lifecycle change to persist"
+                        );
                 }
 
                 connection.commit();
@@ -150,103 +153,173 @@ public class WorkOrderRepository {
                 """;
 
         try (
-                Connection connection =
-                        DatabaseConnection.getConnection();
-                PreparedStatement statement =
-                        connection.prepareStatement(sql)
-        ) {
+                Connection connection
+                = DatabaseConnection.getConnection(); PreparedStatement statement
+                = connection.prepareStatement(sql)) {
             statement.setInt(1, workOrderId);
 
-            try (ResultSet resultSet =
-                         statement.executeQuery()) {
+            try (ResultSet resultSet
+                    = statement.executeQuery()) {
                 if (!resultSet.next()) {
                     return Optional.empty();
                 }
 
-                Asset asset = new Asset(
-                        resultSet.getInt("asset_id"),
-                        resultSet.getString("asset_code"),
-                        resultSet.getString("asset_name"),
-                        resultSet.getString("category"),
-                        resultSet.getString("location"),
-                        AssetStatus.valueOf(
-                                resultSet.getString(
-                                        "asset_status"
-                                )
-                        )
+                return Optional.of(
+                        mapWorkOrder(resultSet)
                 );
-
-                User requester = new User(
-                        resultSet.getInt("requester_id"),
-                        resultSet.getString("requester_name"),
-                        resultSet.getString("requester_email"),
-                        UserRole.valueOf(
-                                resultSet.getString(
-                                        "requester_role"
-                                )
-                        )
-                );
-
-                Complaint complaint = new Complaint(
-                        resultSet.getInt("complaint_id"),
-                        asset,
-                        requester,
-                        resultSet.getString("description"),
-                        ComplaintPriority.valueOf(
-                                resultSet.getString(
-                                        "complaint_priority"
-                                )
-                        ),
-                        ComplaintStatus.valueOf(
-                                resultSet.getString(
-                                        "complaint_status"
-                                )
-                        ),
-                        resultSet
-                                .getTimestamp("reported_at")
-                                .toLocalDateTime()
-                );
-
-                User technician = new User(
-                        resultSet.getInt("technician_id"),
-                        resultSet.getString("technician_name"),
-                        resultSet.getString("technician_email"),
-                        UserRole.valueOf(
-                                resultSet.getString(
-                                        "technician_role"
-                                )
-                        )
-                );
-
-                WorkOrder workOrder = new WorkOrder(
-                        resultSet.getInt("work_order_id"),
-                        complaint,
-                        technician,
-                        WorkOrderStatus.valueOf(
-                                resultSet.getString(
-                                        "work_order_status"
-                                )
-                        ),
-                        resultSet
-                                .getTimestamp("assigned_at")
-                                .toLocalDateTime(),
-                        getNullableTimestamp(
-                                resultSet,
-                                "started_at"
-                        ),
-                        getNullableTimestamp(
-                                resultSet,
-                                "completed_at"
-                        ),
-                        getNullableTimestamp(
-                                resultSet,
-                                "verified_at"
-                        )
-                );
-
-                return Optional.of(workOrder);
             }
         }
+    }
+
+    public List<WorkOrder> findAll()
+            throws SQLException {
+        String sql = """
+            SELECT
+                w.work_order_id,
+                w.status AS work_order_status,
+                w.assigned_at,
+                w.started_at,
+                w.completed_at,
+                w.verified_at,
+
+                c.complaint_id,
+                c.description,
+                c.priority AS complaint_priority,
+                c.status AS complaint_status,
+                c.reported_at,
+
+                a.asset_id,
+                a.asset_code,
+                a.name AS asset_name,
+                a.category,
+                a.location,
+                a.status AS asset_status,
+
+                requester.user_id AS requester_id,
+                requester.name AS requester_name,
+                requester.email AS requester_email,
+                requester.role AS requester_role,
+
+                technician.user_id AS technician_id,
+                technician.name AS technician_name,
+                technician.email AS technician_email,
+                technician.role AS technician_role
+            FROM work_orders w
+            INNER JOIN complaints c
+                ON c.complaint_id = w.complaint_id
+            INNER JOIN assets a
+                ON a.asset_id = c.asset_id
+            INNER JOIN users requester
+                ON requester.user_id =
+                   c.reported_by_user_id
+            INNER JOIN users technician
+                ON technician.user_id =
+                   w.technician_user_id
+            ORDER BY w.assigned_at DESC,
+                     w.work_order_id DESC
+            """;
+
+        List<WorkOrder> workOrders
+                = new ArrayList<>();
+
+        try (
+                Connection connection
+                = DatabaseConnection.getConnection(); PreparedStatement statement
+                = connection.prepareStatement(sql); ResultSet resultSet
+                = statement.executeQuery()) {
+            while (resultSet.next()) {
+                workOrders.add(
+                        mapWorkOrder(resultSet)
+                );
+            }
+        }
+
+        return workOrders;
+    }
+
+    private static WorkOrder mapWorkOrder(
+            ResultSet resultSet)
+            throws SQLException {
+        Asset asset = new Asset(
+                resultSet.getInt("asset_id"),
+                resultSet.getString("asset_code"),
+                resultSet.getString("asset_name"),
+                resultSet.getString("category"),
+                resultSet.getString("location"),
+                AssetStatus.valueOf(
+                        resultSet.getString(
+                                "asset_status"
+                        )
+                )
+        );
+
+        User requester = new User(
+                resultSet.getInt("requester_id"),
+                resultSet.getString("requester_name"),
+                resultSet.getString("requester_email"),
+                UserRole.valueOf(
+                        resultSet.getString(
+                                "requester_role"
+                        )
+                )
+        );
+
+        Complaint complaint = new Complaint(
+                resultSet.getInt("complaint_id"),
+                asset,
+                requester,
+                resultSet.getString("description"),
+                ComplaintPriority.valueOf(
+                        resultSet.getString(
+                                "complaint_priority"
+                        )
+                ),
+                ComplaintStatus.valueOf(
+                        resultSet.getString(
+                                "complaint_status"
+                        )
+                ),
+                resultSet
+                        .getTimestamp("reported_at")
+                        .toLocalDateTime()
+        );
+
+        User technician = new User(
+                resultSet.getInt("technician_id"),
+                resultSet.getString("technician_name"),
+                resultSet.getString("technician_email"),
+                UserRole.valueOf(
+                        resultSet.getString(
+                                "technician_role"
+                        )
+                )
+        );
+
+        return new WorkOrder(
+                resultSet.getInt("work_order_id"),
+                complaint,
+                technician,
+                WorkOrderStatus.valueOf(
+                        resultSet.getString(
+                                "work_order_status"
+                        )
+                ),
+                resultSet
+                        .getTimestamp("assigned_at")
+                        .toLocalDateTime(),
+                getNullableTimestamp(
+                        resultSet,
+                        "started_at"
+                ),
+                getNullableTimestamp(
+                        resultSet,
+                        "completed_at"
+                ),
+                getNullableTimestamp(
+                        resultSet,
+                        "verified_at"
+                )
+        );
     }
 
     private static int insertWorkOrder(
@@ -265,63 +338,63 @@ public class WorkOrderRepository {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
 
-        try (PreparedStatement statement =
-                     connection.prepareStatement(
-                             sql,
-                             Statement.RETURN_GENERATED_KEYS
-                     )) {
-            statement.setInt(
-                    1,
-                    workOrder.getComplaint().getComplaintId()
-            );
-            statement.setInt(
-                    2,
-                    workOrder.getTechnician().getUserId()
-            );
-            statement.setString(
-                    3,
-                    workOrder.getStatus().name()
-            );
-            statement.setTimestamp(
-                    4,
-                    Timestamp.valueOf(workOrder.getAssignedAt())
-            );
+        try (PreparedStatement statement
+                = connection.prepareStatement(
+                        sql,
+                        Statement.RETURN_GENERATED_KEYS
+                )) {
+                    statement.setInt(
+                            1,
+                            workOrder.getComplaint().getComplaintId()
+                    );
+                    statement.setInt(
+                            2,
+                            workOrder.getTechnician().getUserId()
+                    );
+                    statement.setString(
+                            3,
+                            workOrder.getStatus().name()
+                    );
+                    statement.setTimestamp(
+                            4,
+                            Timestamp.valueOf(workOrder.getAssignedAt())
+                    );
 
-            setNullableTimestamp(
-                    statement,
-                    5,
-                    workOrder.getStartedAt()
-            );
-            setNullableTimestamp(
-                    statement,
-                    6,
-                    workOrder.getCompletedAt()
-            );
-            setNullableTimestamp(
-                    statement,
-                    7,
-                    workOrder.getVerifiedAt()
-            );
+                    setNullableTimestamp(
+                            statement,
+                            5,
+                            workOrder.getStartedAt()
+                    );
+                    setNullableTimestamp(
+                            statement,
+                            6,
+                            workOrder.getCompletedAt()
+                    );
+                    setNullableTimestamp(
+                            statement,
+                            7,
+                            workOrder.getVerifiedAt()
+                    );
 
-            int affectedRows = statement.executeUpdate();
+                    int affectedRows = statement.executeUpdate();
 
-            if (affectedRows != 1) {
-                throw new SQLException(
-                        "Expected one work order to be inserted"
-                );
-            }
+                    if (affectedRows != 1) {
+                        throw new SQLException(
+                                "Expected one work order to be inserted"
+                        );
+                    }
 
-            try (ResultSet generatedKeys =
-                         statement.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    return generatedKeys.getInt(1);
+                    try (ResultSet generatedKeys
+                            = statement.getGeneratedKeys()) {
+                        if (generatedKeys.next()) {
+                            return generatedKeys.getInt(1);
+                        }
+                    }
+
+                    throw new SQLException(
+                            "MySQL did not return a generated work-order ID"
+                    );
                 }
-            }
-
-            throw new SQLException(
-                    "MySQL did not return a generated work-order ID"
-            );
-        }
     }
 
     private static void updateComplaintStatus(
@@ -334,8 +407,8 @@ public class WorkOrderRepository {
                   AND status = 'ACCEPTED'
                 """;
 
-        try (PreparedStatement statement =
-                     connection.prepareStatement(sql)) {
+        try (PreparedStatement statement
+                = connection.prepareStatement(sql)) {
             statement.setString(
                     1,
                     complaint.getStatus().name()
@@ -350,7 +423,7 @@ public class WorkOrderRepository {
             if (affectedRows != 1) {
                 throw new SQLException(
                         "The complaint was not in the expected "
-                                + "ACCEPTED database state"
+                        + "ACCEPTED database state"
                 );
             }
         }
@@ -368,8 +441,8 @@ public class WorkOrderRepository {
                   AND started_at IS NULL
                 """;
 
-        try (PreparedStatement statement =
-                     connection.prepareStatement(workOrderSql)) {
+        try (PreparedStatement statement
+                = connection.prepareStatement(workOrderSql)) {
             statement.setString(
                     1,
                     workOrder.getStatus().name()
@@ -386,7 +459,7 @@ public class WorkOrderRepository {
             requireOneUpdatedRow(
                     statement.executeUpdate(),
                     "The work order was not in the expected "
-                                + "ASSIGNED database state"
+                    + "ASSIGNED database state"
             );
         }
 
@@ -397,8 +470,8 @@ public class WorkOrderRepository {
                   AND status = 'ACTIVE'
                 """;
 
-        try (PreparedStatement statement =
-                     connection.prepareStatement(assetSql)) {
+        try (PreparedStatement statement
+                = connection.prepareStatement(assetSql)) {
             statement.setString(
                     1,
                     workOrder
@@ -418,7 +491,7 @@ public class WorkOrderRepository {
             requireOneUpdatedRow(
                     statement.executeUpdate(),
                     "The asset was not in the expected "
-                                + "ACTIVE database state"
+                    + "ACTIVE database state"
             );
         }
     }
@@ -435,8 +508,8 @@ public class WorkOrderRepository {
                   AND completed_at IS NULL
                 """;
 
-        try (PreparedStatement statement =
-                     connection.prepareStatement(sql)) {
+        try (PreparedStatement statement
+                = connection.prepareStatement(sql)) {
             statement.setString(
                     1,
                     workOrder.getStatus().name()
@@ -453,7 +526,7 @@ public class WorkOrderRepository {
             requireOneUpdatedRow(
                     statement.executeUpdate(),
                     "The work order was not in the expected "
-                                + "IN_PROGRESS database state"
+                    + "IN_PROGRESS database state"
             );
         }
     }
@@ -470,8 +543,8 @@ public class WorkOrderRepository {
                   AND verified_at IS NULL
                 """;
 
-        try (PreparedStatement statement =
-                     connection.prepareStatement(workOrderSql)) {
+        try (PreparedStatement statement
+                = connection.prepareStatement(workOrderSql)) {
             statement.setString(
                     1,
                     workOrder.getStatus().name()
@@ -488,7 +561,7 @@ public class WorkOrderRepository {
             requireOneUpdatedRow(
                     statement.executeUpdate(),
                     "The work order was not in the expected "
-                                + "COMPLETED database state"
+                    + "COMPLETED database state"
             );
         }
 
@@ -499,8 +572,8 @@ public class WorkOrderRepository {
                   AND status = 'UNDER_MAINTENANCE'
                 """;
 
-        try (PreparedStatement statement =
-                     connection.prepareStatement(assetSql)) {
+        try (PreparedStatement statement
+                = connection.prepareStatement(assetSql)) {
             statement.setString(
                     1,
                     workOrder
@@ -520,7 +593,7 @@ public class WorkOrderRepository {
             requireOneUpdatedRow(
                     statement.executeUpdate(),
                     "The asset was not in the expected "
-                                + "UNDER_MAINTENANCE database state"
+                    + "UNDER_MAINTENANCE database state"
             );
         }
 
@@ -531,8 +604,8 @@ public class WorkOrderRepository {
                   AND status = 'WORK_ORDER_CREATED'
                 """;
 
-        try (PreparedStatement statement =
-                     connection.prepareStatement(complaintSql)) {
+        try (PreparedStatement statement
+                = connection.prepareStatement(complaintSql)) {
             statement.setString(
                     1,
                     workOrder
@@ -550,7 +623,7 @@ public class WorkOrderRepository {
             requireOneUpdatedRow(
                     statement.executeUpdate(),
                     "The complaint was not in the expected "
-                                + "WORK_ORDER_CREATED database state"
+                    + "WORK_ORDER_CREATED database state"
             );
         }
     }
@@ -584,7 +657,7 @@ public class WorkOrderRepository {
                         || workOrder.getCompletedAt() == null) {
                     throw new IllegalArgumentException(
                             "A completed work order requires "
-                                    + "start and completion times"
+                            + "start and completion times"
                     );
                 }
 
@@ -592,7 +665,7 @@ public class WorkOrderRepository {
                         != AssetStatus.UNDER_MAINTENANCE) {
                     throw new IllegalArgumentException(
                             "The completed work-order asset must "
-                                    + "remain under maintenance"
+                            + "remain under maintenance"
                     );
                 }
             }
@@ -603,7 +676,7 @@ public class WorkOrderRepository {
                         || workOrder.getVerifiedAt() == null) {
                     throw new IllegalArgumentException(
                             "A verified work order requires all "
-                                    + "lifecycle timestamps"
+                            + "lifecycle timestamps"
                     );
                 }
 
@@ -618,16 +691,16 @@ public class WorkOrderRepository {
                         != ComplaintStatus.RESOLVED) {
                     throw new IllegalArgumentException(
                             "The verified work-order complaint "
-                                    + "must be resolved"
+                            + "must be resolved"
                     );
                 }
             }
 
             default ->
-                    throw new IllegalArgumentException(
-                            "Only started, completed, or verified "
-                                    + "work orders can be updated"
-                    );
+                throw new IllegalArgumentException(
+                        "Only started, completed, or verified "
+                        + "work orders can be updated"
+                );
         }
     }
 
@@ -669,7 +742,7 @@ public class WorkOrderRepository {
                 != ComplaintStatus.WORK_ORDER_CREATED) {
             throw new IllegalArgumentException(
                     "The complaint must be marked as having "
-                            + "a work order"
+                    + "a work order"
             );
         }
     }
@@ -694,8 +767,8 @@ public class WorkOrderRepository {
     private static LocalDateTime getNullableTimestamp(
             ResultSet resultSet,
             String columnName) throws SQLException {
-        Timestamp timestamp =
-                resultSet.getTimestamp(columnName);
+        Timestamp timestamp
+                = resultSet.getTimestamp(columnName);
 
         return timestamp == null
                 ? null

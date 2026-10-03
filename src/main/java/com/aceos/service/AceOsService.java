@@ -353,6 +353,14 @@ public class AceOsService {
         );
     }
 
+    public List<WorkOrder> getAllWorkOrders()
+            throws AceOsServiceException {
+        return execute(
+                "The work orders could not be loaded",
+                workOrderRepository::findAll
+        );
+    }
+
     public MaintenanceRecord getMaintenanceRecord(
             int maintenanceRecordId)
             throws AceOsServiceException {

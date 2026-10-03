@@ -49,6 +49,7 @@ Asset
 - Database-backed user directory showing IDs, names, emails, and roles with refresh support
 - Database-backed asset directory showing IDs, codes, locations, and lifecycle statuses with refresh support
 - Database-backed complaint directory showing IDs, related assets, requesters, priorities, and workflow statuses
+- Database-backed work-order directory showing assignment details, lifecycle statuses, and latest activity
 
 ## Technology Stack
 
@@ -120,10 +121,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset, and the dashboard presents the complete workflow clearly. User, asset, and complaint directories expose the IDs and statuses needed by workflow forms directly in the interface.
+The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset, and the dashboard presents the complete workflow clearly. User, asset, complaint, and work-order directories expose every ID and status needed by the workflow forms directly in the interface.
 
 Next development steps:
 
-1. Add a work-order directory to expose lifecycle IDs and statuses.
+1. Make the expanded sidebar navigation usable at smaller window heights.
 2. Continue presentation review and interface polish where useful.
 3. Extend the prototype with preventive maintenance scheduling and inspection tracking.
