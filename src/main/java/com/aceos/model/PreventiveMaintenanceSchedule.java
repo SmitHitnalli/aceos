@@ -78,10 +78,22 @@ public class PreventiveMaintenanceSchedule {
     }
 
     public void pause() {
+        if (status != MaintenanceScheduleStatus.ACTIVE) {
+            throw new IllegalStateException(
+                    "Only an active schedule can be paused"
+            );
+        }
+
         status = MaintenanceScheduleStatus.PAUSED;
     }
 
     public void activate() {
+        if (status != MaintenanceScheduleStatus.PAUSED) {
+            throw new IllegalStateException(
+                    "Only a paused schedule can be activated"
+            );
+        }
+
         status = MaintenanceScheduleStatus.ACTIVE;
     }
 

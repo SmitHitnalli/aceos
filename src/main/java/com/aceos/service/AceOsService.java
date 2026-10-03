@@ -9,6 +9,7 @@ import com.aceos.model.User;
 import com.aceos.model.UserRole;
 import com.aceos.model.WorkOrder;
 import com.aceos.model.PreventiveMaintenanceSchedule;
+import com.aceos.model.MaintenanceScheduleStatus;
 import com.aceos.repository.AssetRepository;
 import com.aceos.repository.ComplaintRepository;
 import com.aceos.repository.MaintenanceRecordRepository;
@@ -161,6 +162,150 @@ public class AceOsService {
                                     )
                             );
                 }
+        );
+    }
+
+    public PreventiveMaintenanceSchedule
+            pausePreventiveMaintenanceSchedule(
+                    int maintenanceScheduleId)
+            throws AceOsServiceException {
+
+        requireId(
+                maintenanceScheduleId,
+                "Maintenance schedule"
+        );
+
+        return execute(
+                "The maintenance schedule could not be paused",
+                () -> {
+                    PreventiveMaintenanceSchedule schedule
+                    = requirePreventiveMaintenanceSchedule(
+                            maintenanceScheduleId
+                    );
+
+                    LocalDate expectedDueDate
+                    = schedule.getNextDueDate();
+
+                    schedule.pause();
+
+                    preventiveMaintenanceScheduleRepository
+                            .updateLifecycle(
+                                    schedule,
+                                    MaintenanceScheduleStatus.ACTIVE,
+                                    expectedDueDate
+                            );
+
+                    return requirePreventiveMaintenanceSchedule(
+                            maintenanceScheduleId
+                    );
+                }
+        );
+    }
+
+    public PreventiveMaintenanceSchedule
+            activatePreventiveMaintenanceSchedule(
+                    int maintenanceScheduleId)
+            throws AceOsServiceException {
+
+        requireId(
+                maintenanceScheduleId,
+                "Maintenance schedule"
+        );
+
+        return execute(
+                "The maintenance schedule could not be activated",
+                () -> {
+                    PreventiveMaintenanceSchedule schedule
+                    = requirePreventiveMaintenanceSchedule(
+                            maintenanceScheduleId
+                    );
+
+                    LocalDate expectedDueDate
+                    = schedule.getNextDueDate();
+
+                    schedule.activate();
+
+                    preventiveMaintenanceScheduleRepository
+                            .updateLifecycle(
+                                    schedule,
+                                    MaintenanceScheduleStatus.PAUSED,
+                                    expectedDueDate
+                            );
+
+                    return requirePreventiveMaintenanceSchedule(
+                            maintenanceScheduleId
+                    );
+                }
+        );
+    }
+
+    public PreventiveMaintenanceSchedule
+            completePreventiveMaintenanceSchedule(
+                    int maintenanceScheduleId,
+                    LocalDate completionDate)
+            throws AceOsServiceException {
+
+        requireId(
+                maintenanceScheduleId,
+                "Maintenance schedule"
+        );
+
+        LocalDate validCompletionDate = requireValue(
+                completionDate,
+                "Completion date is required"
+        );
+
+        if (validCompletionDate.isAfter(LocalDate.now())) {
+            throw new AceOsServiceException(
+                    "Completion date cannot be in the future"
+            );
+        }
+
+        return execute(
+                "The maintenance schedule "
+                + "could not be completed",
+                () -> {
+                    PreventiveMaintenanceSchedule schedule
+                    = requirePreventiveMaintenanceSchedule(
+                            maintenanceScheduleId
+                    );
+
+                    LocalDate expectedDueDate
+                    = schedule.getNextDueDate();
+
+                    schedule.recordCompletion(
+                            validCompletionDate
+                    );
+
+                    preventiveMaintenanceScheduleRepository
+                            .updateLifecycle(
+                                    schedule,
+                                    MaintenanceScheduleStatus.ACTIVE,
+                                    expectedDueDate
+                            );
+
+                    return requirePreventiveMaintenanceSchedule(
+                            maintenanceScheduleId
+                    );
+                }
+        );
+    }
+
+    public PreventiveMaintenanceSchedule
+            getPreventiveMaintenanceSchedule(
+                    int maintenanceScheduleId)
+            throws AceOsServiceException {
+
+        requireId(
+                maintenanceScheduleId,
+                "Maintenance schedule"
+        );
+
+        return execute(
+                "The maintenance schedule could not be loaded",
+                () -> requirePreventiveMaintenanceSchedule(
+                        maintenanceScheduleId
+                )
         );
     }
 
@@ -464,6 +609,22 @@ public class AceOsService {
                 .orElseThrow(() -> new AceOsServiceException(
                 "Asset not found: " + assetId
         ));
+    }
+
+    private PreventiveMaintenanceSchedule
+            requirePreventiveMaintenanceSchedule(
+                    int maintenanceScheduleId)
+            throws SQLException,
+            AceOsServiceException {
+
+        return preventiveMaintenanceScheduleRepository
+                .findById(maintenanceScheduleId)
+                .orElseThrow(
+                        () -> new AceOsServiceException(
+                                "Maintenance schedule not found: "
+                                + maintenanceScheduleId
+                        )
+                );
     }
 
     private Complaint requireComplaint(

@@ -13,6 +13,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import java.util.Optional;
+import java.time.LocalDate;
 
 public class PreventiveMaintenanceScheduleRepository {
 
@@ -138,6 +139,75 @@ public class PreventiveMaintenanceScheduleRepository {
         }
     }
 
+    public void updateLifecycle(
+            PreventiveMaintenanceSchedule schedule,
+            MaintenanceScheduleStatus expectedStatus,
+            LocalDate expectedNextDueDate)
+            throws SQLException {
+
+        requirePersistedSchedule(schedule);
+
+        if (expectedStatus == null) {
+            throw new IllegalArgumentException(
+                    "Expected schedule status is required"
+            );
+        }
+
+        if (expectedNextDueDate == null) {
+            throw new IllegalArgumentException(
+                    "Expected due date is required"
+            );
+        }
+
+        String sql = """
+            UPDATE preventive_maintenance_schedules
+            SET next_due_date = ?,
+                status = ?
+            WHERE maintenance_schedule_id = ?
+              AND status = ?
+              AND next_due_date = ?
+            """;
+
+        try (
+                Connection connection
+                = DatabaseConnection.getConnection(); PreparedStatement statement
+                = connection.prepareStatement(sql)) {
+            statement.setDate(
+                    1,
+                    java.sql.Date.valueOf(
+                            schedule.getNextDueDate()
+                    )
+            );
+            statement.setString(
+                    2,
+                    schedule.getStatus().name()
+            );
+            statement.setInt(
+                    3,
+                    schedule.getMaintenanceScheduleId()
+            );
+            statement.setString(
+                    4,
+                    expectedStatus.name()
+            );
+            statement.setDate(
+                    5,
+                    java.sql.Date.valueOf(
+                            expectedNextDueDate
+                    )
+            );
+
+            int affectedRows = statement.executeUpdate();
+
+            if (affectedRows != 1) {
+                throw new SQLException(
+                        "The maintenance schedule was not "
+                        + "in the expected database state"
+                );
+            }
+        }
+    }
+
     private static PreventiveMaintenanceSchedule mapSchedule(
             ResultSet resultSet)
             throws SQLException {
@@ -164,6 +234,16 @@ public class PreventiveMaintenanceScheduleRepository {
                         resultSet.getString("schedule_status")
                 )
         );
+    }
+
+    private static void requirePersistedSchedule(
+            PreventiveMaintenanceSchedule schedule) {
+
+        if (schedule.getMaintenanceScheduleId() <= 0) {
+            throw new IllegalArgumentException(
+                    "The maintenance schedule must be saved first"
+            );
+        }
     }
 
     private static void requirePersistedAsset(
