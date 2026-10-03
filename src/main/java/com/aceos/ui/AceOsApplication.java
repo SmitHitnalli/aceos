@@ -10,6 +10,7 @@ import com.aceos.ui.view.WorkOrderLifecycleView;
 import com.aceos.ui.view.WorkOrderVerificationView;
 import com.aceos.ui.view.DashboardView;
 import com.aceos.ui.view.UserDirectoryView;
+import com.aceos.ui.view.AssetDirectoryView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -109,6 +110,12 @@ public class AceOsApplication extends Application {
                         "Assets",
                         () -> root.setCenter(
                                 new AssetManagementView(service)
+                        )
+                ),
+                createNavigationButton(
+                        "Asset Directory",
+                        () -> root.setCenter(
+                                new AssetDirectoryView(service)
                         )
                 ),
                 createNavigationButton(

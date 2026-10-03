@@ -10,6 +10,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 
 public class AssetRepository {
 
@@ -26,12 +28,10 @@ public class AssetRepository {
                 """;
 
         try (
-                Connection connection = DatabaseConnection.getConnection();
-                PreparedStatement statement = connection.prepareStatement(
-                        sql,
-                        Statement.RETURN_GENERATED_KEYS
-                )
-        ) {
+                Connection connection = DatabaseConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(
+                sql,
+                Statement.RETURN_GENERATED_KEYS
+        )) {
             statement.setString(1, asset.getAssetCode());
             statement.setString(2, asset.getName());
             statement.setString(3, asset.getCategory());
@@ -79,9 +79,7 @@ public class AssetRepository {
                 """;
 
         try (
-                Connection connection = DatabaseConnection.getConnection();
-                PreparedStatement statement = connection.prepareStatement(sql)
-        ) {
+                Connection connection = DatabaseConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, assetId);
 
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -103,5 +101,44 @@ public class AssetRepository {
                 return Optional.empty();
             }
         }
+    }
+
+    public List<Asset> findAll() throws SQLException {
+        String sql = """
+            SELECT
+                asset_id,
+                asset_code,
+                name,
+                category,
+                location,
+                status
+            FROM assets
+            ORDER BY asset_code, asset_id
+            """;
+
+        List<Asset> assets = new ArrayList<>();
+
+        try (
+                Connection connection
+                = DatabaseConnection.getConnection(); PreparedStatement statement
+                = connection.prepareStatement(sql); ResultSet resultSet
+                = statement.executeQuery()) {
+            while (resultSet.next()) {
+                assets.add(
+                        new Asset(
+                                resultSet.getInt("asset_id"),
+                                resultSet.getString("asset_code"),
+                                resultSet.getString("name"),
+                                resultSet.getString("category"),
+                                resultSet.getString("location"),
+                                AssetStatus.valueOf(
+                                        resultSet.getString("status")
+                                )
+                        )
+                );
+            }
+        }
+
+        return assets;
     }
 }

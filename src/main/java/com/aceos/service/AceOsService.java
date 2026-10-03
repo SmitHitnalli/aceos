@@ -317,6 +317,14 @@ public class AceOsService {
         );
     }
 
+    public List<Asset> getAllAssets()
+            throws AceOsServiceException {
+        return execute(
+                "The assets could not be loaded",
+                assetRepository::findAll
+        );
+    }
+
     public Complaint getComplaint(
             int complaintId) throws AceOsServiceException {
         requireId(complaintId, "Complaint");
