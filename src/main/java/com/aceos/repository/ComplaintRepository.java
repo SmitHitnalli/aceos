@@ -17,6 +17,9 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Optional;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ComplaintRepository {
 
     public Complaint save(Complaint complaint) throws SQLException {
@@ -35,12 +38,10 @@ public class ComplaintRepository {
                 """;
 
         try (
-                Connection connection = DatabaseConnection.getConnection();
-                PreparedStatement statement = connection.prepareStatement(
-                        sql,
-                        Statement.RETURN_GENERATED_KEYS
-                )
-        ) {
+                Connection connection = DatabaseConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(
+                sql,
+                Statement.RETURN_GENERATED_KEYS
+        )) {
             statement.setInt(
                     1,
                     complaint.getAsset().getAssetId()
@@ -108,10 +109,8 @@ public class ComplaintRepository {
                 """;
 
         try (
-                Connection connection = DatabaseConnection.getConnection();
-                PreparedStatement statement =
-                        connection.prepareStatement(sql)
-        ) {
+                Connection connection = DatabaseConnection.getConnection(); PreparedStatement statement
+                = connection.prepareStatement(sql)) {
             statement.setString(
                     1,
                     complaint.getStatus().name()
@@ -126,7 +125,7 @@ public class ComplaintRepository {
             if (affectedRows != 1) {
                 throw new SQLException(
                         "The complaint was not in the expected "
-                                + "SUBMITTED database state"
+                        + "SUBMITTED database state"
                 );
             }
         }
@@ -162,10 +161,8 @@ public class ComplaintRepository {
                 """;
 
         try (
-                Connection connection = DatabaseConnection.getConnection();
-                PreparedStatement statement =
-                        connection.prepareStatement(sql)
-        ) {
+                Connection connection = DatabaseConnection.getConnection(); PreparedStatement statement
+                = connection.prepareStatement(sql)) {
             statement.setInt(1, complaintId);
 
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -173,49 +170,103 @@ public class ComplaintRepository {
                     return Optional.empty();
                 }
 
-                Asset asset = new Asset(
-                        resultSet.getInt("asset_id"),
-                        resultSet.getString("asset_code"),
-                        resultSet.getString("asset_name"),
-                        resultSet.getString("category"),
-                        resultSet.getString("location"),
-                        AssetStatus.valueOf(
-                                resultSet.getString("asset_status")
-                        )
+                return Optional.of(
+                        mapComplaint(resultSet)
                 );
-
-                User reportedBy = new User(
-                        resultSet.getInt("user_id"),
-                        resultSet.getString("reporter_name"),
-                        resultSet.getString("reporter_email"),
-                        UserRole.valueOf(
-                                resultSet.getString("reporter_role")
-                        )
-                );
-
-                Complaint complaint = new Complaint(
-                        resultSet.getInt("complaint_id"),
-                        asset,
-                        reportedBy,
-                        resultSet.getString("description"),
-                        ComplaintPriority.valueOf(
-                                resultSet.getString(
-                                        "complaint_priority"
-                                )
-                        ),
-                        ComplaintStatus.valueOf(
-                                resultSet.getString(
-                                        "complaint_status"
-                                )
-                        ),
-                        resultSet
-                                .getTimestamp("reported_at")
-                                .toLocalDateTime()
-                );
-
-                return Optional.of(complaint);
             }
         }
+    }
+
+    public List<Complaint> findAll()
+            throws SQLException {
+        String sql = """
+            SELECT
+                c.complaint_id,
+                c.description,
+                c.priority AS complaint_priority,
+                c.status AS complaint_status,
+                c.reported_at,
+
+                a.asset_id,
+                a.asset_code,
+                a.name AS asset_name,
+                a.category,
+                a.location,
+                a.status AS asset_status,
+
+                u.user_id,
+                u.name AS reporter_name,
+                u.email AS reporter_email,
+                u.role AS reporter_role
+            FROM complaints c
+            INNER JOIN assets a
+                ON a.asset_id = c.asset_id
+            INNER JOIN users u
+                ON u.user_id = c.reported_by_user_id
+            ORDER BY c.reported_at DESC,
+                     c.complaint_id DESC
+            """;
+
+        List<Complaint> complaints
+                = new ArrayList<>();
+
+        try (
+                Connection connection
+                = DatabaseConnection.getConnection(); PreparedStatement statement
+                = connection.prepareStatement(sql); ResultSet resultSet
+                = statement.executeQuery()) {
+            while (resultSet.next()) {
+                complaints.add(
+                        mapComplaint(resultSet)
+                );
+            }
+        }
+
+        return complaints;
+    }
+
+    private static Complaint mapComplaint(
+            ResultSet resultSet)
+            throws SQLException {
+        Asset asset = new Asset(
+                resultSet.getInt("asset_id"),
+                resultSet.getString("asset_code"),
+                resultSet.getString("asset_name"),
+                resultSet.getString("category"),
+                resultSet.getString("location"),
+                AssetStatus.valueOf(
+                        resultSet.getString("asset_status")
+                )
+        );
+
+        User reportedBy = new User(
+                resultSet.getInt("user_id"),
+                resultSet.getString("reporter_name"),
+                resultSet.getString("reporter_email"),
+                UserRole.valueOf(
+                        resultSet.getString("reporter_role")
+                )
+        );
+
+        return new Complaint(
+                resultSet.getInt("complaint_id"),
+                asset,
+                reportedBy,
+                resultSet.getString("description"),
+                ComplaintPriority.valueOf(
+                        resultSet.getString(
+                                "complaint_priority"
+                        )
+                ),
+                ComplaintStatus.valueOf(
+                        resultSet.getString(
+                                "complaint_status"
+                        )
+                ),
+                resultSet
+                        .getTimestamp("reported_at")
+                        .toLocalDateTime()
+        );
     }
 
     private static void requirePersistedReview(
@@ -232,7 +283,7 @@ public class ComplaintRepository {
                 != ComplaintStatus.REJECTED) {
             throw new IllegalArgumentException(
                     "Only an accepted or rejected complaint "
-                            + "review can be persisted"
+                    + "review can be persisted"
             );
         }
     }

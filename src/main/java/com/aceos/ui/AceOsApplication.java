@@ -11,6 +11,7 @@ import com.aceos.ui.view.WorkOrderVerificationView;
 import com.aceos.ui.view.DashboardView;
 import com.aceos.ui.view.UserDirectoryView;
 import com.aceos.ui.view.AssetDirectoryView;
+import com.aceos.ui.view.ComplaintDirectoryView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -122,6 +123,12 @@ public class AceOsApplication extends Application {
                         "Complaints",
                         () -> root.setCenter(
                                 new ComplaintManagementView(service)
+                        )
+                ),
+                createNavigationButton(
+                        "Complaint Directory",
+                        () -> root.setCenter(
+                                new ComplaintDirectoryView(service)
                         )
                 ),
                 createNavigationButton(

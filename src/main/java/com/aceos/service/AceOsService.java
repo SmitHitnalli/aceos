@@ -335,6 +335,14 @@ public class AceOsService {
         );
     }
 
+    public List<Complaint> getAllComplaints()
+            throws AceOsServiceException {
+        return execute(
+                "The complaints could not be loaded",
+                complaintRepository::findAll
+        );
+    }
+
     public WorkOrder getWorkOrder(
             int workOrderId) throws AceOsServiceException {
         requireId(workOrderId, "Work order");
