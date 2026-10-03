@@ -8,15 +8,18 @@ import com.aceos.model.MaintenanceRecord;
 import com.aceos.model.User;
 import com.aceos.model.UserRole;
 import com.aceos.model.WorkOrder;
+import com.aceos.model.PreventiveMaintenanceSchedule;
 import com.aceos.repository.AssetRepository;
 import com.aceos.repository.ComplaintRepository;
 import com.aceos.repository.MaintenanceRecordRepository;
 import com.aceos.repository.MaintenanceWorkflowRepository;
 import com.aceos.repository.UserRepository;
 import com.aceos.repository.WorkOrderRepository;
+import com.aceos.repository.PreventiveMaintenanceScheduleRepository;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.time.LocalDate;
 
 public class AceOsService {
 
@@ -32,6 +35,8 @@ public class AceOsService {
             = new MaintenanceRecordRepository();
     private final MaintenanceWorkflowRepository maintenanceWorkflowRepository
             = new MaintenanceWorkflowRepository();
+    private final PreventiveMaintenanceScheduleRepository preventiveMaintenanceScheduleRepository
+            = new PreventiveMaintenanceScheduleRepository();
 
     public User registerUser(
             String name,
@@ -97,6 +102,65 @@ public class AceOsService {
                                 AssetStatus.ACTIVE
                         )
                 )
+        );
+    }
+
+    public PreventiveMaintenanceSchedule
+            createPreventiveMaintenanceSchedule(
+                    int assetId,
+                    String taskDescription,
+                    int frequencyDays,
+                    LocalDate nextDueDate)
+            throws AceOsServiceException {
+
+        requireId(assetId, "Asset");
+
+        String validTaskDescription = requireText(
+                taskDescription,
+                "Maintenance task",
+                255
+        );
+
+        if (frequencyDays <= 0) {
+            throw new AceOsServiceException(
+                    "Frequency must be greater than zero"
+            );
+        }
+
+        LocalDate validNextDueDate = requireValue(
+                nextDueDate,
+                "Next due date is required"
+        );
+
+        if (validNextDueDate.isBefore(LocalDate.now())) {
+            throw new AceOsServiceException(
+                    "Next due date cannot be in the past"
+            );
+        }
+
+        return execute(
+                "The preventive maintenance schedule "
+                + "could not be created",
+                () -> {
+                    Asset asset = requireAsset(assetId);
+
+                    if (asset.getStatus() == AssetStatus.RETIRED) {
+                        throw new IllegalStateException(
+                                "A retired asset cannot receive "
+                                + "a maintenance schedule"
+                        );
+                    }
+
+                    return preventiveMaintenanceScheduleRepository
+                            .save(
+                                    new PreventiveMaintenanceSchedule(
+                                            asset,
+                                            validTaskDescription,
+                                            frequencyDays,
+                                            validNextDueDate
+                                    )
+                            );
+                }
         );
     }
 
