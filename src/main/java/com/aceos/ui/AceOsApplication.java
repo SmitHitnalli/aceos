@@ -15,6 +15,8 @@ import com.aceos.ui.view.ComplaintDirectoryView;
 import com.aceos.ui.view.WorkOrderDirectoryView;
 import com.aceos.ui.view.PreventiveMaintenanceDirectoryView;
 import com.aceos.ui.view.PreventiveMaintenanceManagementView;
+import com.aceos.ui.view.AssetInspectionManagementView;
+import com.aceos.ui.view.AssetInspectionDirectoryView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -171,6 +173,22 @@ public class AceOsApplication extends Application {
                         "Schedule Directory",
                         () -> root.setCenter(
                                 new PreventiveMaintenanceDirectoryView(
+                                        service
+                                )
+                        )
+                ),
+                createNavigationButton(
+                        "Manage Inspections",
+                        () -> root.setCenter(
+                                new AssetInspectionManagementView(
+                                        service
+                                )
+                        )
+                ),
+                createNavigationButton(
+                        "Inspection Directory",
+                        () -> root.setCenter(
+                                new AssetInspectionDirectoryView(
                                         service
                                 )
                         )

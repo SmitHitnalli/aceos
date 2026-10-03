@@ -1,6 +1,7 @@
 package com.aceos.service;
 
 import com.aceos.model.Asset;
+import com.aceos.model.AssetInspection;
 import com.aceos.model.AssetStatus;
 import com.aceos.model.Complaint;
 import com.aceos.model.ComplaintPriority;
@@ -10,7 +11,9 @@ import com.aceos.model.UserRole;
 import com.aceos.model.WorkOrder;
 import com.aceos.model.PreventiveMaintenanceSchedule;
 import com.aceos.model.MaintenanceScheduleStatus;
+import com.aceos.model.InspectionStatus;
 import com.aceos.repository.AssetRepository;
+import com.aceos.repository.AssetInspectionRepository;
 import com.aceos.repository.ComplaintRepository;
 import com.aceos.repository.MaintenanceRecordRepository;
 import com.aceos.repository.MaintenanceWorkflowRepository;
@@ -38,6 +41,8 @@ public class AceOsService {
             = new MaintenanceWorkflowRepository();
     private final PreventiveMaintenanceScheduleRepository preventiveMaintenanceScheduleRepository
             = new PreventiveMaintenanceScheduleRepository();
+    private final AssetInspectionRepository assetInspectionRepository
+            = new AssetInspectionRepository();
 
     public User registerUser(
             String name,
@@ -316,6 +321,130 @@ public class AceOsService {
         return execute(
                 "The maintenance schedules could not be loaded",
                 preventiveMaintenanceScheduleRepository::findAll
+        );
+    }
+
+    public AssetInspection scheduleAssetInspection(
+            int assetId,
+            String inspectionType,
+            LocalDate scheduledDate)
+            throws AceOsServiceException {
+        requireId(assetId, "Asset");
+
+        String validInspectionType = requireText(
+                inspectionType,
+                "Inspection type",
+                150
+        );
+        LocalDate validScheduledDate = requireValue(
+                scheduledDate,
+                "Scheduled date is required"
+        );
+
+        if (validScheduledDate.isBefore(LocalDate.now())) {
+            throw new AceOsServiceException(
+                    "Scheduled date cannot be in the past"
+            );
+        }
+
+        return execute(
+                "The inspection could not be scheduled",
+                () -> {
+                    Asset asset = requireAsset(assetId);
+
+                    if (asset.getStatus() == AssetStatus.RETIRED) {
+                        throw new IllegalStateException(
+                                "A retired asset cannot receive "
+                                        + "an inspection"
+                        );
+                    }
+
+                    return assetInspectionRepository.save(
+                            new AssetInspection(
+                                    asset,
+                                    validInspectionType,
+                                    validScheduledDate
+                            )
+                    );
+                }
+        );
+    }
+
+    public AssetInspection completeAssetInspection(
+            int inspectionId,
+            int technicianId,
+            InspectionStatus result,
+            String notes,
+            LocalDate completionDate)
+            throws AceOsServiceException {
+        requireId(inspectionId, "Inspection");
+        requireId(technicianId, "Technician");
+
+        InspectionStatus validResult = requireValue(
+                result,
+                "Inspection result is required"
+        );
+
+        if (validResult == InspectionStatus.SCHEDULED) {
+            throw new AceOsServiceException(
+                    "Inspection result must be PASSED or FAILED"
+            );
+        }
+
+        String validNotes = requireText(
+                notes,
+                "Inspection notes",
+                5000
+        );
+        LocalDate validCompletionDate = requireValue(
+                completionDate,
+                "Completion date is required"
+        );
+
+        if (validCompletionDate.isAfter(LocalDate.now())) {
+            throw new AceOsServiceException(
+                    "Completion date cannot be in the future"
+            );
+        }
+
+        return execute(
+                "The inspection could not be completed",
+                () -> {
+                    AssetInspection inspection =
+                            requireAssetInspection(inspectionId);
+                    User technician = requireUser(technicianId);
+
+                    inspection.complete(
+                            technician,
+                            validResult,
+                            validNotes,
+                            validCompletionDate
+                    );
+                    assetInspectionRepository.updateCompletion(
+                            inspection
+                    );
+
+                    return requireAssetInspection(inspectionId);
+                }
+        );
+    }
+
+    public AssetInspection getAssetInspection(
+            int inspectionId)
+            throws AceOsServiceException {
+        requireId(inspectionId, "Inspection");
+
+        return execute(
+                "The inspection could not be loaded",
+                () -> requireAssetInspection(inspectionId)
+        );
+    }
+
+    public List<AssetInspection> getAllAssetInspections()
+            throws AceOsServiceException {
+        return execute(
+                "The inspections could not be loaded",
+                assetInspectionRepository::findAll
         );
     }
 
@@ -633,6 +762,19 @@ public class AceOsService {
                         () -> new AceOsServiceException(
                                 "Maintenance schedule not found: "
                                 + maintenanceScheduleId
+                        )
+                );
+    }
+
+    private AssetInspection requireAssetInspection(
+            int inspectionId)
+            throws SQLException, AceOsServiceException {
+        return assetInspectionRepository
+                .findById(inspectionId)
+                .orElseThrow(
+                        () -> new AceOsServiceException(
+                                "Inspection not found: "
+                                        + inspectionId
                         )
                 );
     }

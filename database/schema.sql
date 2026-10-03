@@ -147,3 +147,53 @@ CREATE TABLE IF NOT EXISTS preventive_maintenance_schedules (
         ON DELETE RESTRICT
 );
 
+CREATE TABLE IF NOT EXISTS asset_inspections (
+    inspection_id INT AUTO_INCREMENT,
+    asset_id INT NOT NULL,
+    inspection_type VARCHAR(150) NOT NULL,
+    scheduled_date DATE NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'SCHEDULED',
+    inspected_by_user_id INT NULL,
+    notes TEXT NULL,
+    completed_date DATE NULL,
+
+    CONSTRAINT pk_asset_inspections
+        PRIMARY KEY (inspection_id),
+
+    CONSTRAINT chk_asset_inspections_status
+        CHECK (
+            status IN (
+                'SCHEDULED',
+                'PASSED',
+                'FAILED'
+            )
+        ),
+
+    CONSTRAINT chk_asset_inspections_completion
+        CHECK (
+            (
+                status = 'SCHEDULED'
+                AND inspected_by_user_id IS NULL
+                AND completed_date IS NULL
+            )
+            OR
+            (
+                status IN ('PASSED', 'FAILED')
+                AND inspected_by_user_id IS NOT NULL
+                AND notes IS NOT NULL
+                AND completed_date IS NOT NULL
+            )
+        ),
+
+    CONSTRAINT fk_asset_inspections_asset
+        FOREIGN KEY (asset_id)
+        REFERENCES assets (asset_id)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT,
+
+    CONSTRAINT fk_asset_inspections_inspector
+        FOREIGN KEY (inspected_by_user_id)
+        REFERENCES users (user_id)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT
+);
