@@ -309,6 +309,16 @@ public class AceOsService {
         );
     }
 
+    public List<PreventiveMaintenanceSchedule>
+            getAllPreventiveMaintenanceSchedules()
+            throws AceOsServiceException {
+
+        return execute(
+                "The maintenance schedules could not be loaded",
+                preventiveMaintenanceScheduleRepository::findAll
+        );
+    }
+
     public Complaint submitComplaint(
             int assetId,
             int requesterId,

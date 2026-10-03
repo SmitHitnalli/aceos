@@ -13,6 +13,7 @@ import com.aceos.ui.view.UserDirectoryView;
 import com.aceos.ui.view.AssetDirectoryView;
 import com.aceos.ui.view.ComplaintDirectoryView;
 import com.aceos.ui.view.WorkOrderDirectoryView;
+import com.aceos.ui.view.PreventiveMaintenanceDirectoryView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -155,6 +156,14 @@ public class AceOsApplication extends Application {
                         "Maintenance",
                         () -> root.setCenter(
                                 new WorkOrderLifecycleView(service)
+                        )
+                ),
+                createNavigationButton(
+                        "Maintenance Schedules",
+                        () -> root.setCenter(
+                                new PreventiveMaintenanceDirectoryView(
+                                        service
+                                )
                         )
                 ),
                 createNavigationButton(

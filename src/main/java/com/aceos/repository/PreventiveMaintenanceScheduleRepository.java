@@ -14,6 +14,8 @@ import java.sql.Statement;
 
 import java.util.Optional;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 public class PreventiveMaintenanceScheduleRepository {
 
@@ -137,6 +139,48 @@ public class PreventiveMaintenanceScheduleRepository {
                 );
             }
         }
+    }
+
+    public List<PreventiveMaintenanceSchedule> findAll()
+            throws SQLException {
+
+        String sql = """
+            SELECT
+                pms.maintenance_schedule_id,
+                pms.task_description,
+                pms.frequency_days,
+                pms.next_due_date,
+                pms.status AS schedule_status,
+
+                a.asset_id,
+                a.asset_code,
+                a.name AS asset_name,
+                a.category,
+                a.location,
+                a.status AS asset_status
+            FROM preventive_maintenance_schedules pms
+            INNER JOIN assets a
+                ON a.asset_id = pms.asset_id
+            ORDER BY pms.next_due_date,
+                     pms.maintenance_schedule_id
+            """;
+
+        List<PreventiveMaintenanceSchedule> schedules
+                = new ArrayList<>();
+
+        try (
+                Connection connection
+                = DatabaseConnection.getConnection(); PreparedStatement statement
+                = connection.prepareStatement(sql); ResultSet resultSet
+                = statement.executeQuery()) {
+            while (resultSet.next()) {
+                schedules.add(
+                        mapSchedule(resultSet)
+                );
+            }
+        }
+
+        return schedules;
     }
 
     public void updateLifecycle(

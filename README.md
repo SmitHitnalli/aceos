@@ -55,6 +55,7 @@ Asset
 - Preventive-maintenance schedule persistence and relational asset reconstruction
 - Validated preventive-maintenance schedule creation through the application service
 - Persisted preventive-maintenance pause, activation, and recurring completion lifecycle with expected-state protection
+- Database-backed preventive-maintenance directory showing schedule IDs, assets, frequencies, due dates, statuses, and timing
 
 ## Technology Stack
 
@@ -162,10 +163,9 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset, and the dashboard presents the complete workflow clearly. User, asset, complaint, and work-order directories expose every ID and status needed by the workflow forms directly in the interface. Preventive-maintenance expansion now supports verified schedule creation, retrieval, pause, activation, and recurring completion with persisted due-date advancement.
+The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset, and the dashboard presents the complete workflow clearly. User, asset, complaint, and work-order directories expose every ID and status needed by the workflow forms directly in the interface. Preventive-maintenance expansion now supports verified schedule creation, retrieval, pause, activation, recurring completion with persisted due-date advancement, and a refreshable schedule directory.
 
 Next development steps:
 
-1. Add preventive-maintenance directory retrieval.
-2. Build the preventive-maintenance JavaFX interface.
-3. Add inspection and basic compliance tracking afterward.
+1. Build the preventive-maintenance management interface.
+2. Add inspection and basic compliance tracking afterward.
