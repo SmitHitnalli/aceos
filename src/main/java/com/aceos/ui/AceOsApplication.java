@@ -9,6 +9,7 @@ import com.aceos.ui.view.WorkOrderManagementView;
 import com.aceos.ui.view.WorkOrderLifecycleView;
 import com.aceos.ui.view.WorkOrderVerificationView;
 import com.aceos.ui.view.DashboardView;
+import com.aceos.ui.view.UserDirectoryView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -96,6 +97,12 @@ public class AceOsApplication extends Application {
                         "Users",
                         () -> root.setCenter(
                                 new UserManagementView(service)
+                        )
+                ),
+                createNavigationButton(
+                        "User Directory",
+                        () -> root.setCenter(
+                                new UserDirectoryView(service)
                         )
                 ),
                 createNavigationButton(

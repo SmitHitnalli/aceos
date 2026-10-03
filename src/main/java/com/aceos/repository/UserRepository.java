@@ -3,6 +3,8 @@ package com.aceos.repository;
 import com.aceos.database.DatabaseConnection;
 import com.aceos.model.User;
 import com.aceos.model.UserRole;
+import java.util.ArrayList;
+import java.util.List;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -20,12 +22,10 @@ public class UserRepository {
                 """;
 
         try (
-                Connection connection = DatabaseConnection.getConnection();
-                PreparedStatement statement = connection.prepareStatement(
-                        sql,
-                        Statement.RETURN_GENERATED_KEYS
-                )
-        ) {
+                Connection connection = DatabaseConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(
+                sql,
+                Statement.RETURN_GENERATED_KEYS
+        )) {
             statement.setString(1, user.getName());
             statement.setString(2, user.getEmail());
             statement.setString(3, user.getRole().name());
@@ -61,9 +61,7 @@ public class UserRepository {
                 """;
 
         try (
-                Connection connection = DatabaseConnection.getConnection();
-                PreparedStatement statement = connection.prepareStatement(sql)
-        ) {
+                Connection connection = DatabaseConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, userId);
 
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -81,5 +79,36 @@ public class UserRepository {
                 return Optional.empty();
             }
         }
+    }
+
+    public List<User> findAll() throws SQLException {
+        String sql = """
+            SELECT user_id, name, email, role
+            FROM users
+            ORDER BY role, name, user_id
+            """;
+
+        List<User> users = new ArrayList<>();
+
+        try (
+                Connection connection
+                = DatabaseConnection.getConnection(); PreparedStatement statement
+                = connection.prepareStatement(sql); ResultSet resultSet
+                = statement.executeQuery()) {
+            while (resultSet.next()) {
+                users.add(
+                        new User(
+                                resultSet.getInt("user_id"),
+                                resultSet.getString("name"),
+                                resultSet.getString("email"),
+                                UserRole.valueOf(
+                                        resultSet.getString("role")
+                                )
+                        )
+                );
+            }
+        }
+
+        return users;
     }
 }

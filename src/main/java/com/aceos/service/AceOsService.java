@@ -16,23 +16,22 @@ import com.aceos.repository.UserRepository;
 import com.aceos.repository.WorkOrderRepository;
 
 import java.sql.SQLException;
+import java.util.List;
 
 public class AceOsService {
 
-    private final UserRepository userRepository =
-            new UserRepository();
-    private final AssetRepository assetRepository =
-            new AssetRepository();
-    private final ComplaintRepository complaintRepository =
-            new ComplaintRepository();
-    private final WorkOrderRepository workOrderRepository =
-            new WorkOrderRepository();
-    private final MaintenanceRecordRepository
-            maintenanceRecordRepository =
-            new MaintenanceRecordRepository();
-    private final MaintenanceWorkflowRepository
-            maintenanceWorkflowRepository =
-            new MaintenanceWorkflowRepository();
+    private final UserRepository userRepository
+            = new UserRepository();
+    private final AssetRepository assetRepository
+            = new AssetRepository();
+    private final ComplaintRepository complaintRepository
+            = new ComplaintRepository();
+    private final WorkOrderRepository workOrderRepository
+            = new WorkOrderRepository();
+    private final MaintenanceRecordRepository maintenanceRecordRepository
+            = new MaintenanceRecordRepository();
+    private final MaintenanceWorkflowRepository maintenanceWorkflowRepository
+            = new MaintenanceWorkflowRepository();
 
     public User registerUser(
             String name,
@@ -127,10 +126,10 @@ public class AceOsService {
                     User requester = requireUser(requesterId);
 
                     if (requester.getRole()
-                            != UserRole.REQUESTER) {
+                    != UserRole.REQUESTER) {
                         throw new IllegalArgumentException(
                                 "Only a requester can submit "
-                                        + "a complaint"
+                                + "a complaint"
                         );
                     }
 
@@ -156,10 +155,10 @@ public class AceOsService {
         return execute(
                 "The complaint could not be accepted",
                 () -> {
-                    Complaint complaint =
-                            requireComplaint(complaintId);
-                    User administrator =
-                            requireUser(administratorId);
+                    Complaint complaint
+                    = requireComplaint(complaintId);
+                    User administrator
+                    = requireUser(administratorId);
 
                     complaint.accept(administrator);
                     complaintRepository.updateReview(complaint);
@@ -179,10 +178,10 @@ public class AceOsService {
         return execute(
                 "The complaint could not be rejected",
                 () -> {
-                    Complaint complaint =
-                            requireComplaint(complaintId);
-                    User administrator =
-                            requireUser(administratorId);
+                    Complaint complaint
+                    = requireComplaint(complaintId);
+                    User administrator
+                    = requireUser(administratorId);
 
                     complaint.reject(administrator);
                     complaintRepository.updateReview(complaint);
@@ -202,10 +201,10 @@ public class AceOsService {
         return execute(
                 "The work order could not be assigned",
                 () -> {
-                    Complaint complaint =
-                            requireComplaint(complaintId);
-                    User technician =
-                            requireUser(technicianId);
+                    Complaint complaint
+                    = requireComplaint(complaintId);
+                    User technician
+                    = requireUser(technicianId);
 
                     return workOrderRepository.save(
                             new WorkOrder(
@@ -225,8 +224,8 @@ public class AceOsService {
         return execute(
                 "The work order could not be started",
                 () -> {
-                    WorkOrder workOrder =
-                            requireWorkOrder(workOrderId);
+                    WorkOrder workOrder
+                    = requireWorkOrder(workOrderId);
 
                     workOrder.start();
                     workOrderRepository.updateLifecycle(
@@ -253,8 +252,8 @@ public class AceOsService {
         return execute(
                 "The work order could not be completed",
                 () -> {
-                    WorkOrder workOrder =
-                            requireWorkOrder(workOrderId);
+                    WorkOrder workOrder
+                    = requireWorkOrder(workOrderId);
 
                     return maintenanceWorkflowRepository
                             .completeWithMaintenanceRecord(
@@ -275,10 +274,10 @@ public class AceOsService {
         return execute(
                 "The work order could not be verified",
                 () -> {
-                    WorkOrder workOrder =
-                            requireWorkOrder(workOrderId);
-                    User administrator =
-                            requireUser(administratorId);
+                    WorkOrder workOrder
+                    = requireWorkOrder(workOrderId);
+                    User administrator
+                    = requireUser(administratorId);
 
                     workOrder.verify(administrator);
                     workOrderRepository.updateLifecycle(
@@ -297,6 +296,14 @@ public class AceOsService {
         return execute(
                 "The user could not be loaded",
                 () -> requireUser(userId)
+        );
+    }
+
+    public List<User> getAllUsers()
+            throws AceOsServiceException {
+        return execute(
+                "The users could not be loaded",
+                userRepository::findAll
         );
     }
 
@@ -345,7 +352,7 @@ public class AceOsService {
                         .orElseThrow(
                                 () -> new AceOsServiceException(
                                         "Maintenance record not found: "
-                                                + maintenanceRecordId
+                                        + maintenanceRecordId
                                 )
                         )
         );
@@ -357,8 +364,8 @@ public class AceOsService {
         return userRepository
                 .findById(userId)
                 .orElseThrow(() -> new AceOsServiceException(
-                        "User not found: " + userId
-                ));
+                "User not found: " + userId
+        ));
     }
 
     private Asset requireAsset(
@@ -367,8 +374,8 @@ public class AceOsService {
         return assetRepository
                 .findById(assetId)
                 .orElseThrow(() -> new AceOsServiceException(
-                        "Asset not found: " + assetId
-                ));
+                "Asset not found: " + assetId
+        ));
     }
 
     private Complaint requireComplaint(
@@ -377,8 +384,8 @@ public class AceOsService {
         return complaintRepository
                 .findById(complaintId)
                 .orElseThrow(() -> new AceOsServiceException(
-                        "Complaint not found: " + complaintId
-                ));
+                "Complaint not found: " + complaintId
+        ));
     }
 
     private WorkOrder requireWorkOrder(
@@ -387,8 +394,8 @@ public class AceOsService {
         return workOrderRepository
                 .findById(workOrderId)
                 .orElseThrow(() -> new AceOsServiceException(
-                        "Work order not found: " + workOrderId
-                ));
+                "Work order not found: " + workOrderId
+        ));
     }
 
     private static String requireText(
@@ -407,9 +414,9 @@ public class AceOsService {
         if (normalizedValue.length() > maximumLength) {
             throw new AceOsServiceException(
                     fieldName
-                            + " must not exceed "
-                            + maximumLength
-                            + " characters"
+                    + " must not exceed "
+                    + maximumLength
+                    + " characters"
             );
         }
 
@@ -473,13 +480,13 @@ public class AceOsService {
         } catch (AceOsServiceException exception) {
             throw exception;
         } catch (IllegalArgumentException
-                 | IllegalStateException exception) {
+                | IllegalStateException exception) {
             String message = exception.getMessage();
 
             throw new AceOsServiceException(
                     message == null || message.isBlank()
-                            ? "The requested operation is not valid"
-                            : message,
+                    ? "The requested operation is not valid"
+                    : message,
                     exception
             );
         } catch (SQLException exception) {
@@ -497,7 +504,7 @@ public class AceOsService {
         if (exception.getErrorCode() == 1062) {
             return new AceOsServiceException(
                     "A record with the same unique value "
-                            + "already exists",
+                    + "already exists",
                     exception
             );
         }
@@ -514,7 +521,7 @@ public class AceOsService {
         if (sqlState != null && sqlState.startsWith("23")) {
             return new AceOsServiceException(
                     "The operation conflicts with existing "
-                            + "database records",
+                    + "database records",
                     exception
             );
         }
