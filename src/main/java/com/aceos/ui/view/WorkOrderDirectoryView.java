@@ -1,17 +1,27 @@
 package com.aceos.ui.view;
 
 import com.aceos.model.WorkOrder;
+import com.aceos.model.WorkOrderStatus;
 import com.aceos.service.AceOsService;
 import com.aceos.service.AceOsServiceException;
 
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+
+import java.util.Locale;
 
 public class WorkOrderDirectoryView extends VBox {
 
@@ -38,8 +48,39 @@ public class WorkOrderDirectoryView extends VBox {
                         + "-fx-text-fill: #475569;"
         );
 
+        TextField searchField = new TextField();
+        searchField.setPromptText(
+                "Search ID, complaint, asset, or technician"
+        );
+
+        ComboBox<String> statusFilter =
+                new ComboBox<>();
+        statusFilter.getItems().add("ALL");
+        for (WorkOrderStatus status : WorkOrderStatus.values()) {
+            statusFilter.getItems().add(status.name());
+        }
+        statusFilter.setValue("ALL");
+
+        HBox filters = new HBox(
+                10,
+                new Label("Search"),
+                searchField,
+                new Label("Status"),
+                statusFilter
+        );
+        HBox.setHgrow(searchField, Priority.ALWAYS);
+
+        ObservableList<WorkOrder> sourceItems =
+                FXCollections.observableArrayList();
+        FilteredList<WorkOrder> filteredItems =
+                new FilteredList<>(
+                        sourceItems,
+                        workOrder -> true
+                );
+
         TableView<WorkOrder> table =
                 new TableView<>();
+        table.setItems(filteredItems);
         table.setPlaceholder(
                 new Label("No work orders found")
         );
@@ -125,10 +166,53 @@ public class WorkOrderDirectoryView extends VBox {
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
 
+        Runnable applyFilters = () -> {
+            String query = searchField.getText() == null
+                    ? ""
+                    : searchField.getText().trim()
+                            .toLowerCase(Locale.ROOT);
+            String selectedStatus = statusFilter.getValue();
+
+            filteredItems.setPredicate(workOrder -> {
+                boolean matchesSearch = query.isEmpty()
+                        || String.valueOf(
+                                workOrder.getWorkOrderId()
+                        ).contains(query)
+                        || String.valueOf(
+                                workOrder.getComplaint()
+                                        .getComplaintId()
+                        ).contains(query)
+                        || workOrder.getComplaint()
+                                .getAsset()
+                                .getAssetCode()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || workOrder.getTechnician().getName()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query);
+
+                boolean matchesStatus =
+                        "ALL".equals(selectedStatus)
+                        || workOrder.getStatus().name()
+                                .equals(selectedStatus);
+
+                return matchesSearch && matchesStatus;
+            });
+        };
+
+        searchField.textProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+        statusFilter.valueProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+
         refreshButton.setOnAction(event ->
                 loadWorkOrders(
                         service,
-                        table,
+                        sourceItems,
                         refreshButton,
                         statusLabel
                 )
@@ -137,6 +221,7 @@ public class WorkOrderDirectoryView extends VBox {
         getChildren().addAll(
                 title,
                 description,
+                filters,
                 table,
                 refreshButton,
                 statusLabel
@@ -144,7 +229,7 @@ public class WorkOrderDirectoryView extends VBox {
 
         loadWorkOrders(
                 service,
-                table,
+                sourceItems,
                 refreshButton,
                 statusLabel
         );
@@ -152,13 +237,13 @@ public class WorkOrderDirectoryView extends VBox {
 
     private void loadWorkOrders(
             AceOsService service,
-            TableView<WorkOrder> table,
+            ObservableList<WorkOrder> sourceItems,
             Button refreshButton,
             Label statusLabel) {
         refreshButton.setDisable(true);
 
         try {
-            table.getItems().setAll(
+            sourceItems.setAll(
                     service.getAllWorkOrders()
             );
 
@@ -166,7 +251,7 @@ public class WorkOrderDirectoryView extends VBox {
                     "-fx-text-fill: #15803d;"
             );
             statusLabel.setText(
-                    table.getItems().size()
+                    sourceItems.size()
                             + " work orders loaded"
             );
         } catch (AceOsServiceException exception) {

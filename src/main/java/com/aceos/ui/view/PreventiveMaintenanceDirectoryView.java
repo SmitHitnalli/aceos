@@ -7,14 +7,22 @@ import com.aceos.service.AceOsServiceException;
 
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.time.LocalDate;
+import java.util.Locale;
 
 public class PreventiveMaintenanceDirectoryView
         extends VBox {
@@ -44,8 +52,42 @@ public class PreventiveMaintenanceDirectoryView
                         + "-fx-text-fill: #475569;"
         );
 
+        TextField searchField = new TextField();
+        searchField.setPromptText(
+                "Search ID, asset, task, due date, or timing"
+        );
+
+        ComboBox<String> statusFilter =
+                new ComboBox<>();
+        statusFilter.getItems().add("ALL");
+        for (MaintenanceScheduleStatus status
+                : MaintenanceScheduleStatus.values()) {
+            statusFilter.getItems().add(status.name());
+        }
+        statusFilter.setValue("ALL");
+
+        HBox filters = new HBox(
+                10,
+                new Label("Search"),
+                searchField,
+                new Label("Status"),
+                statusFilter
+        );
+        HBox.setHgrow(searchField, Priority.ALWAYS);
+
+        ObservableList<PreventiveMaintenanceSchedule>
+                sourceItems =
+                FXCollections.observableArrayList();
+        FilteredList<PreventiveMaintenanceSchedule>
+                filteredItems =
+                new FilteredList<>(
+                        sourceItems,
+                        schedule -> true
+                );
+
         TableView<PreventiveMaintenanceSchedule> table =
                 new TableView<>();
+        table.setItems(filteredItems);
 
         table.setPlaceholder(
                 new Label(
@@ -154,10 +196,56 @@ public class PreventiveMaintenanceDirectoryView
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
 
+        Runnable applyFilters = () -> {
+            String query = searchField.getText() == null
+                    ? ""
+                    : searchField.getText().trim()
+                            .toLowerCase(Locale.ROOT);
+            String selectedStatus = statusFilter.getValue();
+
+            filteredItems.setPredicate(schedule -> {
+                boolean matchesSearch = query.isEmpty()
+                        || String.valueOf(
+                                schedule
+                                        .getMaintenanceScheduleId()
+                        ).contains(query)
+                        || schedule.getAsset().getAssetCode()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || schedule.getTaskDescription()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || String.valueOf(
+                                schedule.getFrequencyDays()
+                        ).contains(query)
+                        || schedule.getNextDueDate().toString()
+                                .contains(query)
+                        || getTiming(schedule)
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query);
+
+                boolean matchesStatus =
+                        "ALL".equals(selectedStatus)
+                        || schedule.getStatus().name()
+                                .equals(selectedStatus);
+
+                return matchesSearch && matchesStatus;
+            });
+        };
+
+        searchField.textProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+        statusFilter.valueProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+
         refreshButton.setOnAction(event ->
                 loadSchedules(
                         service,
-                        table,
+                        sourceItems,
                         refreshButton,
                         statusLabel
                 )
@@ -166,6 +254,7 @@ public class PreventiveMaintenanceDirectoryView
         getChildren().addAll(
                 title,
                 description,
+                filters,
                 table,
                 refreshButton,
                 statusLabel
@@ -173,7 +262,7 @@ public class PreventiveMaintenanceDirectoryView
 
         loadSchedules(
                 service,
-                table,
+                sourceItems,
                 refreshButton,
                 statusLabel
         );
@@ -181,14 +270,15 @@ public class PreventiveMaintenanceDirectoryView
 
     private void loadSchedules(
             AceOsService service,
-            TableView<PreventiveMaintenanceSchedule> table,
+            ObservableList<PreventiveMaintenanceSchedule>
+                    sourceItems,
             Button refreshButton,
             Label statusLabel) {
 
         refreshButton.setDisable(true);
 
         try {
-            table.getItems().setAll(
+            sourceItems.setAll(
                     service
                             .getAllPreventiveMaintenanceSchedules()
             );
@@ -197,7 +287,7 @@ public class PreventiveMaintenanceDirectoryView
                     "-fx-text-fill: #15803d;"
             );
             statusLabel.setText(
-                    table.getItems().size()
+                    sourceItems.size()
                             + " maintenance schedules loaded"
             );
         } catch (AceOsServiceException exception) {

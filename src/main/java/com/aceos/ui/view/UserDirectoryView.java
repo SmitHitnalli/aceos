@@ -6,12 +6,20 @@ import com.aceos.service.AceOsServiceException;
 
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+
+import java.util.Locale;
 
 public class UserDirectoryView extends VBox {
 
@@ -37,7 +45,28 @@ public class UserDirectoryView extends VBox {
                 + "-fx-text-fill: #475569;"
         );
 
+        TextField searchField = new TextField();
+        searchField.setPromptText(
+                "Search ID, name, email, or role"
+        );
+
+        HBox filters = new HBox(
+                10,
+                new Label("Search"),
+                searchField
+        );
+        HBox.setHgrow(searchField, Priority.ALWAYS);
+
+        ObservableList<User> sourceItems =
+                FXCollections.observableArrayList();
+        FilteredList<User> filteredItems =
+                new FilteredList<>(
+                        sourceItems,
+                        user -> true
+                );
+
         TableView<User> table = new TableView<>();
+        table.setItems(filteredItems);
         table.setPlaceholder(
                 new Label("No users found")
         );
@@ -92,10 +121,34 @@ public class UserDirectoryView extends VBox {
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
 
+        searchField.textProperty().addListener(
+                (observable, oldValue, newValue) -> {
+                    String query = newValue == null
+                            ? ""
+                            : newValue.trim()
+                                    .toLowerCase(Locale.ROOT);
+
+                    filteredItems.setPredicate(user ->
+                            query.isEmpty()
+                            || String.valueOf(user.getUserId())
+                                    .contains(query)
+                            || user.getName()
+                                    .toLowerCase(Locale.ROOT)
+                                    .contains(query)
+                            || user.getEmail()
+                                    .toLowerCase(Locale.ROOT)
+                                    .contains(query)
+                            || user.getRole().name()
+                                    .toLowerCase(Locale.ROOT)
+                                    .contains(query)
+                    );
+                }
+        );
+
         refreshButton.setOnAction(event
                 -> loadUsers(
                         service,
-                        table,
+                        sourceItems,
                         refreshButton,
                         statusLabel
                 )
@@ -104,6 +157,7 @@ public class UserDirectoryView extends VBox {
         getChildren().addAll(
                 title,
                 description,
+                filters,
                 table,
                 refreshButton,
                 statusLabel
@@ -111,7 +165,7 @@ public class UserDirectoryView extends VBox {
 
         loadUsers(
                 service,
-                table,
+                sourceItems,
                 refreshButton,
                 statusLabel
         );
@@ -119,13 +173,13 @@ public class UserDirectoryView extends VBox {
 
     private void loadUsers(
             AceOsService service,
-            TableView<User> table,
+            ObservableList<User> sourceItems,
             Button refreshButton,
             Label statusLabel) {
         refreshButton.setDisable(true);
 
         try {
-            table.getItems().setAll(
+            sourceItems.setAll(
                     service.getAllUsers()
             );
 
@@ -133,7 +187,7 @@ public class UserDirectoryView extends VBox {
                     "-fx-text-fill: #15803d;"
             );
             statusLabel.setText(
-                    table.getItems().size()
+                    sourceItems.size()
                     + " users loaded"
             );
         } catch (AceOsServiceException exception) {

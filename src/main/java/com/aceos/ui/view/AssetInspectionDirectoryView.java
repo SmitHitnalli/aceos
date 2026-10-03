@@ -7,14 +7,22 @@ import com.aceos.service.AceOsServiceException;
 
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 import java.time.LocalDate;
+import java.util.Locale;
 
 public class AssetInspectionDirectoryView extends VBox {
 
@@ -40,8 +48,40 @@ public class AssetInspectionDirectoryView extends VBox {
                         + "-fx-text-fill: #475569;"
         );
 
+        TextField searchField = new TextField();
+        searchField.setPromptText(
+                "Search ID, asset, type, inspector, or compliance"
+        );
+
+        ComboBox<String> statusFilter =
+                new ComboBox<>();
+        statusFilter.getItems().add("ALL");
+        for (InspectionStatus status
+                : InspectionStatus.values()) {
+            statusFilter.getItems().add(status.name());
+        }
+        statusFilter.setValue("ALL");
+
+        HBox filters = new HBox(
+                10,
+                new Label("Search"),
+                searchField,
+                new Label("Status"),
+                statusFilter
+        );
+        HBox.setHgrow(searchField, Priority.ALWAYS);
+
+        ObservableList<AssetInspection> sourceItems =
+                FXCollections.observableArrayList();
+        FilteredList<AssetInspection> filteredItems =
+                new FilteredList<>(
+                        sourceItems,
+                        inspection -> true
+                );
+
         TableView<AssetInspection> table =
                 new TableView<>();
+        table.setItems(filteredItems);
         table.setPlaceholder(
                 new Label("No inspections found")
         );
@@ -144,10 +184,65 @@ public class AssetInspectionDirectoryView extends VBox {
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
 
+        Runnable applyFilters = () -> {
+            String query = searchField.getText() == null
+                    ? ""
+                    : searchField.getText().trim()
+                            .toLowerCase(Locale.ROOT);
+            String selectedStatus = statusFilter.getValue();
+
+            filteredItems.setPredicate(inspection -> {
+                String inspectorName =
+                        inspection.getInspectedBy() == null
+                        ? ""
+                        : inspection.getInspectedBy().getName();
+                String notes = inspection.getNotes() == null
+                        ? ""
+                        : inspection.getNotes();
+
+                boolean matchesSearch = query.isEmpty()
+                        || String.valueOf(
+                                inspection.getInspectionId()
+                        ).contains(query)
+                        || inspection.getAsset().getAssetCode()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || inspection.getInspectionType()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || inspection.getScheduledDate().toString()
+                                .contains(query)
+                        || inspectorName
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || notes.toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || getComplianceState(inspection)
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query);
+
+                boolean matchesStatus =
+                        "ALL".equals(selectedStatus)
+                        || inspection.getStatus().name()
+                                .equals(selectedStatus);
+
+                return matchesSearch && matchesStatus;
+            });
+        };
+
+        searchField.textProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+        statusFilter.valueProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+
         refreshButton.setOnAction(event ->
                 loadInspections(
                         service,
-                        table,
+                        sourceItems,
                         refreshButton,
                         statusLabel
                 )
@@ -156,6 +251,7 @@ public class AssetInspectionDirectoryView extends VBox {
         getChildren().addAll(
                 title,
                 description,
+                filters,
                 table,
                 refreshButton,
                 statusLabel
@@ -163,7 +259,7 @@ public class AssetInspectionDirectoryView extends VBox {
 
         loadInspections(
                 service,
-                table,
+                sourceItems,
                 refreshButton,
                 statusLabel
         );
@@ -171,20 +267,20 @@ public class AssetInspectionDirectoryView extends VBox {
 
     private void loadInspections(
             AceOsService service,
-            TableView<AssetInspection> table,
+            ObservableList<AssetInspection> sourceItems,
             Button refreshButton,
             Label statusLabel) {
         refreshButton.setDisable(true);
 
         try {
-            table.getItems().setAll(
+            sourceItems.setAll(
                     service.getAllAssetInspections()
             );
             statusLabel.setStyle(
                     "-fx-text-fill: #15803d;"
             );
             statusLabel.setText(
-                    table.getItems().size()
+                    sourceItems.size()
                             + " inspections loaded"
             );
         } catch (AceOsServiceException exception) {

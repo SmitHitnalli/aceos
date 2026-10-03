@@ -60,6 +60,7 @@ Asset
 - Asset-inspection model with scheduled, passed, and failed states plus overdue and compliance calculations
 - Database-backed inspection scheduling, relational retrieval, technician completion, and expected-state protection
 - Inspection management and directory screens showing upcoming, overdue, compliant, and non-compliant assets
+- Instant client-side search across every directory, with status filters for assets, complaints, work orders, maintenance schedules, and inspections
 
 ## Technology Stack
 
@@ -168,9 +169,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset, and the dashboard presents the complete workflow clearly. User, asset, complaint, and work-order directories expose every ID and status needed by the workflow forms directly in the interface. Preventive maintenance supports schedule creation, retrieval, pause, activation, recurring completion with persisted due-date advancement, a management screen, and a refreshable directory. Inspection and basic compliance tracking support scheduling, technician pass or fail completion, overdue calculation, compliance results, and JavaFX management and directory screens. The database-backed inspection verification confirms relational reconstruction, technician-role enforcement, protected completion, passed and failed compliance results, and directory retrieval.
+The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset, and the dashboard presents the complete workflow clearly. User, asset, complaint, and work-order directories expose every ID and status needed by the workflow forms directly in the interface. Preventive maintenance supports schedule creation, retrieval, pause, activation, recurring completion with persisted due-date advancement, a management screen, and a refreshable directory. Inspection and basic compliance tracking support scheduling, technician pass or fail completion, overdue calculation, compliance results, and JavaFX management and directory screens. The database-backed inspection verification confirms relational reconstruction, technician-role enforcement, protected completion, passed and failed compliance results, and directory retrieval. Every directory now supports instant search, while lifecycle-based directories also provide status filtering without additional database calls.
 
 Next development steps:
 
-1. Complete the visual smoke check of the inspection management and directory screens.
-2. Add search, filters, dashboards, and reporting where useful.
+1. Verify directory search and status filters in JavaFX.
+2. Add useful database-backed dashboard statistics.
+3. Add a small summary report only if it improves the final demonstration.

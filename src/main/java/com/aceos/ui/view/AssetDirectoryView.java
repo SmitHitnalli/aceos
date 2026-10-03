@@ -1,17 +1,27 @@
 package com.aceos.ui.view;
 
 import com.aceos.model.Asset;
+import com.aceos.model.AssetStatus;
 import com.aceos.service.AceOsService;
 import com.aceos.service.AceOsServiceException;
 
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+
+import java.util.Locale;
 
 public class AssetDirectoryView extends VBox {
 
@@ -37,7 +47,38 @@ public class AssetDirectoryView extends VBox {
                         + "-fx-text-fill: #475569;"
         );
 
+        TextField searchField = new TextField();
+        searchField.setPromptText(
+                "Search ID, code, name, category, or location"
+        );
+
+        ComboBox<String> statusFilter =
+                new ComboBox<>();
+        statusFilter.getItems().add("ALL");
+        for (AssetStatus status : AssetStatus.values()) {
+            statusFilter.getItems().add(status.name());
+        }
+        statusFilter.setValue("ALL");
+
+        HBox filters = new HBox(
+                10,
+                new Label("Search"),
+                searchField,
+                new Label("Status"),
+                statusFilter
+        );
+        HBox.setHgrow(searchField, Priority.ALWAYS);
+
+        ObservableList<Asset> sourceItems =
+                FXCollections.observableArrayList();
+        FilteredList<Asset> filteredItems =
+                new FilteredList<>(
+                        sourceItems,
+                        asset -> true
+                );
+
         TableView<Asset> table = new TableView<>();
+        table.setItems(filteredItems);
         table.setPlaceholder(
                 new Label("No assets found")
         );
@@ -110,10 +151,52 @@ public class AssetDirectoryView extends VBox {
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
 
+        Runnable applyFilters = () -> {
+            String query = searchField.getText() == null
+                    ? ""
+                    : searchField.getText().trim()
+                            .toLowerCase(Locale.ROOT);
+            String selectedStatus = statusFilter.getValue();
+
+            filteredItems.setPredicate(asset -> {
+                boolean matchesSearch = query.isEmpty()
+                        || String.valueOf(asset.getAssetId())
+                                .contains(query)
+                        || asset.getAssetCode()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || asset.getName()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || asset.getCategory()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || asset.getLocation()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query);
+
+                boolean matchesStatus =
+                        "ALL".equals(selectedStatus)
+                        || asset.getStatus().name()
+                                .equals(selectedStatus);
+
+                return matchesSearch && matchesStatus;
+            });
+        };
+
+        searchField.textProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+        statusFilter.valueProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+
         refreshButton.setOnAction(event ->
                 loadAssets(
                         service,
-                        table,
+                        sourceItems,
                         refreshButton,
                         statusLabel
                 )
@@ -122,6 +205,7 @@ public class AssetDirectoryView extends VBox {
         getChildren().addAll(
                 title,
                 description,
+                filters,
                 table,
                 refreshButton,
                 statusLabel
@@ -129,7 +213,7 @@ public class AssetDirectoryView extends VBox {
 
         loadAssets(
                 service,
-                table,
+                sourceItems,
                 refreshButton,
                 statusLabel
         );
@@ -137,13 +221,13 @@ public class AssetDirectoryView extends VBox {
 
     private void loadAssets(
             AceOsService service,
-            TableView<Asset> table,
+            ObservableList<Asset> sourceItems,
             Button refreshButton,
             Label statusLabel) {
         refreshButton.setDisable(true);
 
         try {
-            table.getItems().setAll(
+            sourceItems.setAll(
                     service.getAllAssets()
             );
 
@@ -151,7 +235,7 @@ public class AssetDirectoryView extends VBox {
                     "-fx-text-fill: #15803d;"
             );
             statusLabel.setText(
-                    table.getItems().size()
+                    sourceItems.size()
                             + " assets loaded"
             );
         } catch (AceOsServiceException exception) {

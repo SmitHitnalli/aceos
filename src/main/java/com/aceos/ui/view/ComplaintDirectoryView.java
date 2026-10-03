@@ -1,17 +1,27 @@
 package com.aceos.ui.view;
 
 import com.aceos.model.Complaint;
+import com.aceos.model.ComplaintStatus;
 import com.aceos.service.AceOsService;
 import com.aceos.service.AceOsServiceException;
 
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+
+import java.util.Locale;
 
 public class ComplaintDirectoryView extends VBox {
 
@@ -38,8 +48,39 @@ public class ComplaintDirectoryView extends VBox {
                         + "-fx-text-fill: #475569;"
         );
 
+        TextField searchField = new TextField();
+        searchField.setPromptText(
+                "Search ID, asset, requester, priority, or text"
+        );
+
+        ComboBox<String> statusFilter =
+                new ComboBox<>();
+        statusFilter.getItems().add("ALL");
+        for (ComplaintStatus status : ComplaintStatus.values()) {
+            statusFilter.getItems().add(status.name());
+        }
+        statusFilter.setValue("ALL");
+
+        HBox filters = new HBox(
+                10,
+                new Label("Search"),
+                searchField,
+                new Label("Status"),
+                statusFilter
+        );
+        HBox.setHgrow(searchField, Priority.ALWAYS);
+
+        ObservableList<Complaint> sourceItems =
+                FXCollections.observableArrayList();
+        FilteredList<Complaint> filteredItems =
+                new FilteredList<>(
+                        sourceItems,
+                        complaint -> true
+                );
+
         TableView<Complaint> table =
                 new TableView<>();
+        table.setItems(filteredItems);
         table.setPlaceholder(
                 new Label("No complaints found")
         );
@@ -124,10 +165,53 @@ public class ComplaintDirectoryView extends VBox {
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
 
+        Runnable applyFilters = () -> {
+            String query = searchField.getText() == null
+                    ? ""
+                    : searchField.getText().trim()
+                            .toLowerCase(Locale.ROOT);
+            String selectedStatus = statusFilter.getValue();
+
+            filteredItems.setPredicate(complaint -> {
+                boolean matchesSearch = query.isEmpty()
+                        || String.valueOf(
+                                complaint.getComplaintId()
+                        ).contains(query)
+                        || complaint.getAsset().getAssetCode()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || complaint.getReportedBy().getName()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || complaint.getPriority().name()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                        || complaint.getDescription()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query);
+
+                boolean matchesStatus =
+                        "ALL".equals(selectedStatus)
+                        || complaint.getStatus().name()
+                                .equals(selectedStatus);
+
+                return matchesSearch && matchesStatus;
+            });
+        };
+
+        searchField.textProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+        statusFilter.valueProperty().addListener(
+                (observable, oldValue, newValue) ->
+                        applyFilters.run()
+        );
+
         refreshButton.setOnAction(event ->
                 loadComplaints(
                         service,
-                        table,
+                        sourceItems,
                         refreshButton,
                         statusLabel
                 )
@@ -136,6 +220,7 @@ public class ComplaintDirectoryView extends VBox {
         getChildren().addAll(
                 title,
                 description,
+                filters,
                 table,
                 refreshButton,
                 statusLabel
@@ -143,7 +228,7 @@ public class ComplaintDirectoryView extends VBox {
 
         loadComplaints(
                 service,
-                table,
+                sourceItems,
                 refreshButton,
                 statusLabel
         );
@@ -151,13 +236,13 @@ public class ComplaintDirectoryView extends VBox {
 
     private void loadComplaints(
             AceOsService service,
-            TableView<Complaint> table,
+            ObservableList<Complaint> sourceItems,
             Button refreshButton,
             Label statusLabel) {
         refreshButton.setDisable(true);
 
         try {
-            table.getItems().setAll(
+            sourceItems.setAll(
                     service.getAllComplaints()
             );
 
@@ -165,7 +250,7 @@ public class ComplaintDirectoryView extends VBox {
                     "-fx-text-fill: #15803d;"
             );
             statusLabel.setText(
-                    table.getItems().size()
+                    sourceItems.size()
                             + " complaints loaded"
             );
         } catch (AceOsServiceException exception) {
