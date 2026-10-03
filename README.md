@@ -79,6 +79,21 @@ aceos/
 └── README.md
 ```
 
+## Prerequisites
+
+- Java 24
+- Maven 3.9 or newer
+- MySQL 8
+- MySQL Workbench or another MySQL client
+
+## Database Setup
+
+1. Open `database/schema.sql` in MySQL Workbench and execute it.
+2. Optionally execute `database/sample_data.sql` once to load demonstration data.
+3. Create a local MySQL application user with permission to select, insert, and update records in the `aceos` database.
+
+The sample-data script is intended for a fresh database and should not be repeatedly executed against the same data.
+
 ## Database Configuration
 
 AceOS reads its database connection settings from environment variables:
@@ -89,6 +104,16 @@ ACEOS_DB_USER
 ACEOS_DB_PASSWORD
 ```
 
+Example for the current PowerShell session:
+
+```powershell
+$env:ACEOS_DB_URL = "jdbc:mysql://localhost:3306/aceos"
+$env:ACEOS_DB_USER = "aceos_app"
+$env:ACEOS_DB_PASSWORD = "your local database password"
+```
+
+Replace the password locally. Never commit real credentials.
+
 Database credentials must not be stored in the source code or committed to Git.
 
 ## Build
@@ -96,8 +121,16 @@ Database credentials must not be stored in the source code or committed to Git.
 From the project directory:
 
 ```powershell
-mvn compile
+mvn clean package
 ```
+
+## Run the Desktop Application
+
+```powershell
+mvn javafx:run
+```
+
+The database environment variables must be set in the same terminal before launching AceOS.
 
 ## Run the Database-Backed Workflow
 
