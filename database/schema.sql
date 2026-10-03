@@ -123,3 +123,27 @@ CREATE TABLE IF NOT EXISTS maintenance_records (
         ON DELETE RESTRICT
 );
 
+CREATE TABLE IF NOT EXISTS preventive_maintenance_schedules (
+    maintenance_schedule_id INT AUTO_INCREMENT,
+    asset_id INT NOT NULL,
+    task_description VARCHAR(255) NOT NULL,
+    frequency_days INT NOT NULL,
+    next_due_date DATE NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+
+    CONSTRAINT pk_preventive_maintenance_schedules
+        PRIMARY KEY (maintenance_schedule_id),
+
+    CONSTRAINT chk_preventive_schedule_frequency
+        CHECK (frequency_days > 0),
+
+    CONSTRAINT chk_preventive_schedule_status
+        CHECK (status IN ('ACTIVE', 'PAUSED')),
+
+    CONSTRAINT fk_preventive_schedule_asset
+        FOREIGN KEY (asset_id)
+        REFERENCES assets (asset_id)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT
+);
+

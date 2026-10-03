@@ -23,7 +23,7 @@ Asset
 - Complaint priorities and workflow statuses
 - Work-order assignment and status transitions
 - Maintenance-record creation
-- Normalized five-table MySQL schema
+- Normalized six-table MySQL schema
 - Database constraints and referential integrity
 - Environment-based JDBC configuration
 - User persistence and retrieval
@@ -51,6 +51,8 @@ Asset
 - Database-backed complaint directory showing IDs, related assets, requesters, priorities, and workflow statuses
 - Database-backed work-order directory showing assignment details, lifecycle statuses, and latest activity
 - Scrollable sidebar navigation that keeps every workflow section accessible at smaller window heights
+- Preventive-maintenance schedule model with active/paused state, due-date checks, and recurring-date calculation
+- Preventive-maintenance schedule persistence and relational asset reconstruction
 
 ## Technology Stack
 
@@ -147,6 +149,7 @@ mvn exec:java "-Dexec.mainClass=com.aceos.ComplaintRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.WorkOrderRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.WorkOrderLifecycleTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.MaintenanceRecordRepositoryTest"
+mvn exec:java "-Dexec.mainClass=com.aceos.PreventiveMaintenanceScheduleRepositoryTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.AceOsServiceTest"
 mvn exec:java "-Dexec.mainClass=com.aceos.AceOsServiceValidationTest"
 ```
@@ -155,10 +158,11 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset, and the dashboard presents the complete workflow clearly. User, asset, complaint, and work-order directories expose every ID and status needed by the workflow forms directly in the interface.
+The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset, and the dashboard presents the complete workflow clearly. User, asset, complaint, and work-order directories expose every ID and status needed by the workflow forms directly in the interface. Preventive-maintenance expansion is underway, with its domain model, database table, save operation, and relational retrieval verified.
 
 Next development steps:
 
-1. Complete the final presentation and interface review.
-2. Review the repository for publication readiness.
-3. Extend the prototype with preventive maintenance scheduling and inspection tracking.
+1. Add preventive-maintenance operations to `AceOsService`.
+2. Add schedule lifecycle persistence and directory retrieval.
+3. Build the preventive-maintenance JavaFX interface.
+4. Add inspection and basic compliance tracking afterward.
