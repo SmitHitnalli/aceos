@@ -50,6 +50,7 @@ Asset
 - Database-backed asset directory showing IDs, codes, locations, and lifecycle statuses with refresh support
 - Database-backed complaint directory showing IDs, related assets, requesters, priorities, and workflow statuses
 - Database-backed work-order directory showing assignment details, lifecycle statuses, and latest activity
+- Scrollable sidebar navigation that keeps every workflow section accessible at smaller window heights
 
 ## Technology Stack
 
@@ -125,6 +126,6 @@ The core AceOS prototype is complete. The domain model, normalized database, JDB
 
 Next development steps:
 
-1. Make the expanded sidebar navigation usable at smaller window heights.
-2. Continue presentation review and interface polish where useful.
+1. Complete the final presentation and interface review.
+2. Review the repository for publication readiness.
 3. Extend the prototype with preventive maintenance scheduling and inspection tracking.

@@ -24,6 +24,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.scene.control.ScrollPane;
 
 public class AceOsApplication extends Application {
 
@@ -79,7 +80,7 @@ public class AceOsApplication extends Application {
         return header;
     }
 
-    private VBox createNavigation() {
+    private ScrollPane createNavigation() {
         VBox navigation = new VBox(10);
         navigation.setPadding(
                 new Insets(24, 16, 24, 16)
@@ -164,7 +165,23 @@ public class AceOsApplication extends Application {
                 )
         );
 
-        return navigation;
+        ScrollPane scrollPane
+                = new ScrollPane(navigation);
+
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(
+                ScrollPane.ScrollBarPolicy.NEVER
+        );
+        scrollPane.setVbarPolicy(
+                ScrollPane.ScrollBarPolicy.AS_NEEDED
+        );
+        scrollPane.setPrefWidth(228);
+        scrollPane.setStyle(
+                "-fx-background-color: #e8eef5;"
+                + "-fx-background: #e8eef5;"
+        );
+
+        return scrollPane;
     }
 
     private Button createNavigationButton(
