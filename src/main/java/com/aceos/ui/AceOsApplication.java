@@ -8,6 +8,7 @@ import com.aceos.ui.view.ComplaintReviewView;
 import com.aceos.ui.view.WorkOrderManagementView;
 import com.aceos.ui.view.WorkOrderLifecycleView;
 import com.aceos.ui.view.WorkOrderVerificationView;
+import com.aceos.ui.view.DashboardView;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
@@ -33,11 +34,7 @@ public class AceOsApplication extends Application {
         root.setTop(createHeader());
         root.setLeft(createNavigation());
 
-        showPlaceholder(
-                "Dashboard",
-                "Choose a section from "
-                + "the navigation menu."
-        );
+        root.setCenter(new DashboardView());
 
         Scene scene = new Scene(root, 1000, 650);
 
@@ -91,10 +88,8 @@ public class AceOsApplication extends Application {
         navigation.getChildren().addAll(
                 createNavigationButton(
                         "Dashboard",
-                        () -> showPlaceholder(
-                                "Dashboard",
-                                "Choose a section from "
-                                + "the navigation menu."
+                        () -> root.setCenter(
+                                new DashboardView()
                         )
                 ),
                 createNavigationButton(
@@ -142,46 +137,6 @@ public class AceOsApplication extends Application {
         );
 
         return navigation;
-    }
-
-    private void showPlaceholder(
-            String titleText,
-            String messageText) {
-        root.setCenter(
-                createPlaceholder(
-                        titleText,
-                        messageText
-                )
-        );
-    }
-
-    private VBox createPlaceholder(
-            String titleText,
-            String messageText) {
-        Label title = new Label(titleText);
-        title.setStyle(
-                "-fx-font-size: 28px;"
-                + "-fx-font-weight: bold;"
-                + "-fx-text-fill: #1e293b;"
-        );
-
-        Label message = new Label(messageText);
-        message.setStyle(
-                "-fx-font-size: 15px;"
-                + "-fx-text-fill: #475569;"
-        );
-        message.setWrapText(true);
-
-        VBox content = new VBox(
-                14,
-                title,
-                message
-        );
-        content.setPadding(
-                new Insets(40)
-        );
-
-        return content;
     }
 
     private Button createNavigationButton(

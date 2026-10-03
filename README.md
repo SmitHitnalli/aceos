@@ -45,6 +45,7 @@ Asset
 - Transactional work-order assignment with technician-role and complaint-state feedback
 - Database-backed work-order start and completion with lifecycle feedback and maintenance-record creation
 - Database-backed administrative maintenance verification with role, state, and final workflow feedback
+- Presentation-ready dashboard with a clear five-stage maintenance workflow overview
 
 ## Technology Stack
 
@@ -116,10 +117,10 @@ The required database environment variables must be available in the terminal be
 
 ## Development Status
 
-The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, and final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset.
+The core AceOS prototype is complete. The domain model, normalized database, JDBC repositories, application service, validation, error translation, and JavaFX interface support the complete workflow from registration and complaint submission through work assignment, maintenance completion, record creation, and administrative verification. The interface keeps business rules and persistence coordination in `AceOsService`, final verification transactionally produces a `VERIFIED` work order, `RESOLVED` complaint, and `ACTIVE` asset, and the dashboard presents the complete workflow clearly.
 
 Next development steps:
 
-1. Review and polish the completed core prototype for presentation.
-2. Add useful record lookup or list views to reduce manual ID lookup.
+1. Add useful record lookup or list views to reduce manual ID lookup.
+2. Continue presentation review and interface polish where useful.
 3. Extend the prototype with preventive maintenance scheduling and inspection tracking.
