@@ -78,7 +78,7 @@ Asset
 aceos/
 ├── database/
 │   ├── schema.sql
-│   └── sample_data.sql
+│   └── demo_reset.sql
 ├── src/main/java/com/aceos/
 │   ├── database/
 │   ├── model/
@@ -100,10 +100,39 @@ aceos/
 ## Database Setup
 
 1. Open `database/schema.sql` in MySQL Workbench and execute it.
-2. Optionally execute `database/sample_data.sql` once to load demonstration data.
+2. Optionally execute `database/demo_reset.sql` to load the deterministic demonstration dataset.
 3. Create a local MySQL application user with permission to select, insert, and update records in the `aceos` database.
 
-The sample-data script is intended for a fresh database and should not be repeatedly executed against the same data.
+`demo_reset.sql` deletes every existing row in the seven AceOS tables before rebuilding the demonstration dataset. Run it only against a disposable demonstration or development database, using MySQL Workbench or another administrative connection. It can then be rerun whenever the demonstration must return to the same known state.
+
+## Deterministic Demonstration Data
+
+The reset script creates the following stable workflow IDs:
+
+| Demonstration value | ID |
+| --- | ---: |
+| Requester | `1` |
+| Technician | `2` |
+| Administrator | `3` |
+| Submitted complaint | `1` |
+| Accepted complaint | `2` |
+| Assigned work order | `1` |
+| In-progress work order | `2` |
+| Completed work order | `3` |
+| Verified work order | `4` |
+
+After every reset, the dashboard begins with these totals:
+
+| Dashboard metric | Expected total |
+| --- | ---: |
+| Total assets | `6` |
+| Active assets | `4` |
+| Open complaints | `5` |
+| Active work orders | `3` |
+| Overdue schedules | `1` |
+| Failed inspections | `1` |
+
+The script also creates submitted, accepted, rejected, resolved and work-order-linked complaints; assigned, in-progress, completed and verified work orders; active, overdue and paused preventive schedules; and scheduled, passed and failed inspections. Its final query reports `PASS` only when the expected dashboard totals are present.
 
 ## Database Configuration
 
