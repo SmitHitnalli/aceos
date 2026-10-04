@@ -43,7 +43,7 @@ public class AceOsApplication extends Application {
         root.setTop(createHeader());
         root.setLeft(createNavigation());
 
-        root.setCenter(new DashboardView());
+        root.setCenter(new DashboardView(service));
 
         Scene scene = new Scene(root, 1000, 650);
 
@@ -98,7 +98,7 @@ public class AceOsApplication extends Application {
                 createNavigationButton(
                         "Dashboard",
                         () -> root.setCenter(
-                                new DashboardView()
+                                new DashboardView(service)
                         )
                 ),
                 createNavigationButton(

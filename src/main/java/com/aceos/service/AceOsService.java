@@ -12,6 +12,8 @@ import com.aceos.model.WorkOrder;
 import com.aceos.model.PreventiveMaintenanceSchedule;
 import com.aceos.model.MaintenanceScheduleStatus;
 import com.aceos.model.InspectionStatus;
+import com.aceos.model.DashboardStatistics;
+
 import com.aceos.repository.AssetRepository;
 import com.aceos.repository.AssetInspectionRepository;
 import com.aceos.repository.ComplaintRepository;
@@ -20,6 +22,7 @@ import com.aceos.repository.MaintenanceWorkflowRepository;
 import com.aceos.repository.UserRepository;
 import com.aceos.repository.WorkOrderRepository;
 import com.aceos.repository.PreventiveMaintenanceScheduleRepository;
+import com.aceos.repository.DashboardStatisticsRepository;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -43,6 +46,8 @@ public class AceOsService {
             = new PreventiveMaintenanceScheduleRepository();
     private final AssetInspectionRepository assetInspectionRepository
             = new AssetInspectionRepository();
+    private final DashboardStatisticsRepository dashboardStatisticsRepository
+            = new DashboardStatisticsRepository();
 
     public User registerUser(
             String name,
@@ -355,7 +360,7 @@ public class AceOsService {
                     if (asset.getStatus() == AssetStatus.RETIRED) {
                         throw new IllegalStateException(
                                 "A retired asset cannot receive "
-                                        + "an inspection"
+                                + "an inspection"
                         );
                     }
 
@@ -410,8 +415,8 @@ public class AceOsService {
         return execute(
                 "The inspection could not be completed",
                 () -> {
-                    AssetInspection inspection =
-                            requireAssetInspection(inspectionId);
+                    AssetInspection inspection
+                    = requireAssetInspection(inspectionId);
                     User technician = requireUser(technicianId);
 
                     inspection.complete(
@@ -637,6 +642,14 @@ public class AceOsService {
         );
     }
 
+    public DashboardStatistics getDashboardStatistics()
+            throws AceOsServiceException {
+        return execute(
+                "The dashboard statistics could not be loaded",
+                dashboardStatisticsRepository::load
+        );
+    }
+
     public User getUser(
             int userId) throws AceOsServiceException {
         requireId(userId, "User");
@@ -774,7 +787,7 @@ public class AceOsService {
                 .orElseThrow(
                         () -> new AceOsServiceException(
                                 "Inspection not found: "
-                                        + inspectionId
+                                + inspectionId
                         )
                 );
     }
