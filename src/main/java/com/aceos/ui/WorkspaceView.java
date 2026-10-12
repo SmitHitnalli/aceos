@@ -93,7 +93,7 @@ public final class WorkspaceView extends BorderPane {
             add("review", "Review complaints", () -> new RepairFlowView(service, false, "SUBMITTED"));
             add("assign", "Assign work", () -> new RepairFlowView(service, false, "ACCEPTED"));
             add("verify", "Verify maintenance", () -> new RepairFlowView(service, true, "COMPLETED"));
-            add("assignments", "Assignments", () -> new AssignmentView(service));
+            add("assignments", "Inspection assignments", () -> new InspectionFlowView(service, "UNASSIGNED", null, false));
             add("availability", "Asset availability", () -> new AssetAvailabilityView(service));
             add("schedules", "Manage schedules", () -> new PreventiveMaintenanceManagementView(service));
             add("schedule-inspection", "Schedule inspections", () -> new AssetInspectionManagementView(service));
@@ -119,7 +119,12 @@ public final class WorkspaceView extends BorderPane {
 
     private Node dashboard(AceOsService service) {
         try {
-            return new DashboardView(service, this::navigate, (kind, id) -> openRepair(service, kind.equals("Work order"), id));
+            return new DashboardView(service, this::navigate, (kind, id) -> {
+                if (kind.equals("Inspection")) {
+                    select("inspections", "Inspection #" + id, new InspectionFlowView(service, null, id, false));
+                    if (narrow) setMenuVisible(false);
+                } else openRepair(service, kind.equals("Work order"), id);
+            });
         } catch (AceOsServiceException e) {
             Label error = new Label(e.getMessage() + " Sign out and sign in again.");
             error.setWrapText(true);

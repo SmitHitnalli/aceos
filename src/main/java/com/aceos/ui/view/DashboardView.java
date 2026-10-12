@@ -169,7 +169,7 @@ public class DashboardView extends ScrollPane {
             if (item.status().equals("COMPLETED")) route = "jobs";
             Button open = action(role == UserRole.REQUESTER ? "View complaint progress" : "Open " + item.kind().toLowerCase(), route, false);
             open.setId("dashboard-record-" + item.kind().toLowerCase().replace(' ', '-') + "-" + item.id());
-            if (openRecord != null && !item.kind().equals("Inspection"))
+            if (openRecord != null)
                 open.setOnAction(e -> openRecord.accept(item.kind(), item.id()));
             VBox row = new VBox(8,
                     label(item.kind() + " #" + item.id() + " · " + item.asset(), "section-title"),

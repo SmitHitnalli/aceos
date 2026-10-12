@@ -614,6 +614,160 @@ class UiSmokeTest {
         }
     }
 
+    private static final class InspectionPreview extends AceOsService {
+        final com.aceos.model.UserRole role;
+        final com.aceos.model.Asset asset = new com.aceos.model.Asset(11, "AC-101", "Classroom air conditioner", "Cooling", "Room 101", com.aceos.model.AssetStatus.ACTIVE);
+        final com.aceos.model.User technician = new com.aceos.model.User(5, "Example technician", "tech@aceos.local", com.aceos.model.UserRole.TECHNICIAN);
+        volatile com.aceos.model.AssetInspection inspection;
+        volatile boolean failRead, failWrite, empty, noTechnicians;
+        volatile CountDownLatch gate;
+        final java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+        InspectionPreview(com.aceos.model.UserRole role) {
+            this.role = role;
+            inspection = new com.aceos.model.AssetInspection(71, asset, "Electrical safety", java.time.LocalDate.now(), com.aceos.model.InspectionStatus.SCHEDULED, null, null, null);
+            inspection.setAssignedTechnicianId(5);
+        }
+        void read() throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread());
+            if (failRead) throw new com.aceos.service.AceOsServiceException("Read failed");
+        }
+        void write() throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread()); writes.incrementAndGet();
+            if (gate != null) try { gate.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { throw new RuntimeException(e); }
+            if (failWrite) throw new com.aceos.service.AceOsServiceException("Write failed");
+        }
+        @Override public com.aceos.model.User signedInUser() { return role == com.aceos.model.UserRole.TECHNICIAN ? technician : new com.aceos.model.User(1, "Administrator", "admin@aceos.local", role); }
+        @Override public java.util.List<com.aceos.model.AssetInspection> getAllAssetInspections() throws com.aceos.service.AceOsServiceException { read(); return empty ? java.util.List.of() : java.util.List.of(inspection); }
+        @Override public com.aceos.model.AssetInspection getAssetInspection(int id) throws com.aceos.service.AceOsServiceException { read(); assertEquals(71, id); return inspection; }
+        @Override public java.util.List<com.aceos.model.Asset> getAllAssets() throws com.aceos.service.AceOsServiceException { read(); return empty ? java.util.List.of() : java.util.List.of(asset); }
+        @Override public java.util.List<com.aceos.model.User> getActiveTechnicians() throws com.aceos.service.AceOsServiceException { read(); return noTechnicians ? java.util.List.of() : java.util.List.of(technician); }
+        @Override public com.aceos.model.AssetInspection scheduleAssetInspection(int id, String type, java.time.LocalDate date) throws com.aceos.service.AceOsServiceException {
+            assertEquals(11, id); write(); inspection = new com.aceos.model.AssetInspection(71, asset, type, date, com.aceos.model.InspectionStatus.SCHEDULED, null, null, null); return inspection;
+        }
+        @Override public void assignInspection(int id, int tech) throws com.aceos.service.AceOsServiceException { assertEquals(71, id); assertEquals(5, tech); write(); inspection.setAssignedTechnicianId(tech); }
+        @Override public com.aceos.model.AssetInspection completeAssetInspection(int id, com.aceos.model.InspectionStatus result, String notes, java.time.LocalDate date) throws com.aceos.service.AceOsServiceException {
+            assertEquals(71, id); write(); inspection.complete(technician, result, notes, date); return inspection;
+        }
+        @Override public com.aceos.model.DashboardSummary getDashboardSummary() {
+            return new com.aceos.model.DashboardSummary(java.util.Map.of(), java.util.List.of(new com.aceos.model.DashboardSummary.Item("Inspection", 71, "AC-101", "SCHEDULED", "Electrical safety")));
+        }
+    }
+
+    @Test
+    void inspectionLayoutsExactNavigationSchedulingAndAssignment() throws Exception {
+        for (var role : new com.aceos.model.UserRole[] {com.aceos.model.UserRole.ADMINISTRATOR, com.aceos.model.UserRole.TECHNICIAN}) {
+            for (int[] size : new int[][] {{800,520}, {1280,800}}) {
+                var service = new InspectionPreview(role);
+                var root = new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+                fx(() -> { root.set(new com.aceos.ui.WorkspaceView(service, () -> {}, () -> {})); new Scene(root.get(), size[0], size[1]); return null; });
+                awaitControl(root.get(), "dashboard-refresh");
+                fx(() -> { fire(root.get(), "dashboard-record-inspection-71"); return null; });
+                awaitControl(root.get(), "inspection-refresh");
+                fx(() -> {
+                    assertTrue(((javafx.scene.layout.VBox)root.get().lookup("#inspection-detail")).getChildren().stream().anyMatch(n -> n instanceof javafx.scene.control.Label l && l.getText().contains("Electrical safety")));
+                    snapshot(root.get(), size, "inspection-detail-" + role, true);
+                    var flow = (InspectionFlowView)root.get().getCenter(); flow.setVvalue(1); flow.layout();
+                    var bounds = flow.lookup("#inspection-save").localToScene(flow.lookup("#inspection-save").getBoundsInLocal());
+                    assertTrue(bounds.getMinY() >= 0 && bounds.getMaxY() <= size[1]);
+                    snapshot(root.get(), size, "inspection-actions-" + role, true);
+                    fire(root.get(), "inspection-back"); return null;
+                });
+                awaitControl(root.get(), "inspection-refresh");
+                fx(() -> {
+                    var table = (javafx.scene.control.TableView<?>)root.get().lookup("#inspection-table"); table.getSelectionModel().selectFirst();
+                    snapshot(root.get(), size, "inspection-list-" + role, true);
+                    table.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,"","",javafx.scene.input.KeyCode.ENTER,false,false,false,false)); return null;
+                });
+                awaitControl(root.get(), "inspection-refresh");
+                if (role == com.aceos.model.UserRole.ADMINISTRATOR) {
+                    fx(() -> { root.get().navigate("schedule-inspection"); return null; });
+                    awaitControl(root.get(), "inspection-refresh");
+                    fx(() -> {
+                        ((javafx.scene.control.ComboBox<?>)root.get().lookup("#inspection-asset-choice")).getSelectionModel().selectFirst();
+                        ((javafx.scene.control.TextField)root.get().lookup("#inspection-type")).setText("Fire safety");
+                        snapshot(root.get(), size, "inspection-schedule", true);
+                        var flow = (InspectionFlowView)root.get().getCenter(); flow.setVvalue(1); flow.layout();
+                        var bounds = flow.lookup("#inspection-create").localToScene(flow.lookup("#inspection-create").getBoundsInLocal());
+                        assertTrue(bounds.getMinY() >= 0 && bounds.getMaxY() <= size[1]);
+                        snapshot(root.get(), size, "inspection-schedule-action", true);
+                        fire(root.get(), "inspection-create"); fire(root.get(), "inspection-create"); return null;
+                    });
+                    awaitControl(root.get(), "inspection-refresh");
+                    fx(() -> { assertEquals(1, service.writes.get()); ((javafx.scene.control.ComboBox<?>)root.get().lookup("#inspection-technician-choice")).getSelectionModel().selectFirst(); fire(root.get(), "inspection-save"); return null; });
+                    awaitControl(root.get(), "inspection-refresh"); assertEquals(2, service.writes.get());
+                }
+            }
+        }
+    }
+
+    @Test
+    void inspectionFailureRetainsInputBlocksDuplicatesAndRecovers() throws Exception {
+        var service = new InspectionPreview(com.aceos.model.UserRole.TECHNICIAN);
+        var root = new java.util.concurrent.atomic.AtomicReference<InspectionFlowView>();
+        fx(() -> { root.set(new InspectionFlowView(service, null, 71, false)); new Scene(root.get(),800,520); return null; });
+        awaitControl(root.get(), "inspection-refresh"); service.failWrite = true; service.gate = new CountDownLatch(1);
+        fx(() -> {
+            ((javafx.scene.control.TextArea)root.get().lookup("#inspection-notes")).setText("Cable insulation failed");
+            ((javafx.scene.control.ComboBox<com.aceos.model.InspectionStatus>)root.get().lookup("#inspection-result")).setValue(com.aceos.model.InspectionStatus.FAILED);
+            fire(root.get(), "inspection-save"); fire(root.get(), "inspection-save"); fire(root.get(), "inspection-refresh"); return null;
+        });
+        service.gate.countDown(); awaitControl(root.get(), "inspection-refresh");
+        fx(() -> {
+            assertEquals(1, service.writes.get()); assertTrue(root.get().lookup("#inspection-save").isDisabled());
+            assertEquals("Cable insulation failed", ((javafx.scene.control.TextArea)root.get().lookup("#inspection-notes")).getText());
+            service.failWrite = false; service.gate = null; fire(root.get(), "inspection-refresh"); return null;
+        });
+        awaitControl(root.get(), "inspection-refresh"); fx(() -> { fire(root.get(), "inspection-save"); return null; });
+        awaitControl(root.get(), "inspection-refresh");
+        fx(() -> {
+            assertEquals(2, service.writes.get()); assertNull(root.get().lookup("#inspection-save"));
+            assertTrue(((javafx.scene.control.Label)root.get().lookup("#inspection-feedback")).getText().contains("safety hold"));
+            service.failRead = true; fire(root.get(), "inspection-back"); return null;
+        });
+        awaitControl(root.get(), "inspection-refresh");
+        fx(() -> { assertTrue(((javafx.scene.control.TableView<?>)root.get().lookup("#inspection-table")).getItems().isEmpty()); service.failRead = false; service.empty = true; fire(root.get(), "inspection-refresh"); return null; });
+        awaitControl(root.get(), "inspection-refresh");
+        fx(() -> { assertTrue(((javafx.scene.control.TableView<?>)root.get().lookup("#inspection-table")).getItems().isEmpty()); service.empty = false; fire(root.get(), "inspection-refresh"); return null; });
+        awaitControl(root.get(), "inspection-refresh");
+        fx(() -> {
+            var search = (javafx.scene.control.TextField)root.get().lookup("#inspection-search"); var table = (javafx.scene.control.TableView<?>)root.get().lookup("#inspection-table");
+            search.setText("missing"); assertTrue(table.getItems().isEmpty()); search.setText("Room 101"); assertEquals(1,table.getItems().size()); return null;
+        });
+        var adminService = new InspectionPreview(com.aceos.model.UserRole.ADMINISTRATOR); adminService.noTechnicians = true;
+        fx(() -> { root.set(new InspectionFlowView(adminService,null,71,false)); new Scene(root.get(),800,520); return null; });
+        awaitControl(root.get(), "inspection-refresh"); fx(() -> { assertTrue(root.get().lookup("#inspection-save").isDisabled()); return null; });
+    }
+
+    @Test
+    void inspectionAdministratorFailuresRetainSelectionsAndRequireRefresh() throws Exception {
+        var service = new InspectionPreview(com.aceos.model.UserRole.ADMINISTRATOR);
+        var root = new java.util.concurrent.atomic.AtomicReference<InspectionFlowView>();
+        fx(() -> { root.set(new InspectionFlowView(service,null,null,true)); new Scene(root.get(),800,520); return null; });
+        awaitControl(root.get(), "inspection-refresh"); service.failWrite = true;
+        fx(() -> {
+            ((javafx.scene.control.TextField)root.get().lookup("#inspection-asset-search")).setText("missing");
+            var assets = (javafx.scene.control.ComboBox<?>)root.get().lookup("#inspection-asset-choice"); assertTrue(assets.getItems().isEmpty());
+            ((javafx.scene.control.TextField)root.get().lookup("#inspection-asset-search")).setText("Room 101"); assets.getSelectionModel().selectFirst();
+            ((javafx.scene.control.TextField)root.get().lookup("#inspection-type")).setText("Keep this type"); fire(root.get(), "inspection-create"); return null;
+        });
+        awaitControl(root.get(), "inspection-refresh");
+        fx(() -> {
+            assertEquals("Keep this type", ((javafx.scene.control.TextField)root.get().lookup("#inspection-type")).getText());
+            assertNotNull(((javafx.scene.control.ComboBox<?>)root.get().lookup("#inspection-asset-choice")).getValue());
+            assertTrue(root.get().lookup("#inspection-create").isDisabled()); service.failWrite = false; fire(root.get(), "inspection-refresh"); return null;
+        });
+        awaitControl(root.get(), "inspection-refresh"); fx(() -> { fire(root.get(), "inspection-create"); return null; });
+        awaitControl(root.get(), "inspection-refresh"); service.failWrite = true; service.gate = new CountDownLatch(1);
+        fx(() -> { ((javafx.scene.control.ComboBox<?>)root.get().lookup("#inspection-technician-choice")).getSelectionModel().selectFirst(); fire(root.get(), "inspection-save"); fire(root.get(), "inspection-save"); return null; });
+        service.gate.countDown(); awaitControl(root.get(), "inspection-refresh");
+        fx(() -> {
+            assertEquals(3,service.writes.get()); assertNotNull(((javafx.scene.control.ComboBox<?>)root.get().lookup("#inspection-technician-choice")).getValue());
+            assertTrue(root.get().lookup("#inspection-save").isDisabled()); service.failWrite = false; service.gate = null; fire(root.get(), "inspection-refresh"); return null;
+        });
+        awaitControl(root.get(), "inspection-refresh"); fx(() -> { fire(root.get(), "inspection-save"); return null; });
+        awaitControl(root.get(), "inspection-refresh"); assertEquals(4,service.writes.get());
+    }
+
     private void snapshot(Region root, int[] size, String name) throws Exception {
         snapshot(root, size, name, false);
     }

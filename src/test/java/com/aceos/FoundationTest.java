@@ -478,6 +478,34 @@ class FoundationTest {
     }
 
     @Test
+    void connectedInspectionOwnershipStaleCompletionAndIndependentFailureHolds() throws Exception {
+        var a = asset("INSPECTION-FLOW");
+        var i = admin.scheduleAssetInspection(a.getAssetId(), "Electrical safety", LocalDate.now());
+        denied(requester::getAllAssetInspections);
+        denied(() -> requester.getAssetInspection(i.getInspectionId()));
+        denied(() -> technician.getAssetInspection(i.getInspectionId()));
+        admin.assignInspection(i.getInspectionId(), 5);
+        assertEquals(1, technician.getAllAssetInspections().size());
+        assertTrue(otherTechnician.getAllAssetInspections().isEmpty());
+        admin.assignInspection(i.getInspectionId(), 6);
+        denied(() -> technician.getAssetInspection(i.getInspectionId()));
+        denied(() -> technician.completeAssetInspection(i.getInspectionId(), InspectionStatus.PASSED, "Stale owner", LocalDate.now()));
+        otherTechnician.completeAssetInspection(i.getInspectionId(), InspectionStatus.FAILED, "Damaged insulation", LocalDate.now());
+        denied(() -> admin.assignInspection(i.getInspectionId(), 5));
+        denied(() -> otherTechnician.completeAssetInspection(i.getInspectionId(), InspectionStatus.PASSED, "Stale result", LocalDate.now()));
+        assertEquals("Damaged insulation", admin.getAssetInspection(i.getInspectionId()).getNotes());
+        assertEquals(1, admin.getSafetyHolds(a.getAssetId()).size());
+        inspection(a, InspectionStatus.FAILED);
+        inspection(a, InspectionStatus.PASSED);
+        assertEquals(2, admin.getSafetyHolds(a.getAssetId()).stream().filter(h -> h.clearedAt() == null).count());
+        assertEquals(AssetStatus.OUT_OF_SERVICE, admin.getAsset(a.getAssetId()).getStatus());
+        var pending = admin.scheduleAssetInspection(a.getAssetId(), "Follow-up", LocalDate.now());
+        admin.deactivateAccount(5);
+        denied(() -> admin.assignInspection(pending.getInspectionId(), 5));
+        admin.signOut(); denied(() -> admin.getAssetInspection(pending.getInspectionId()));
+    }
+
+    @Test
     void roleChangesLogoutAndLastAdministrator() throws Exception {
         denied(() -> admin.deactivateAccount(1));
         denied(() -> admin.changeAccountRole(1, UserRole.REQUESTER));
