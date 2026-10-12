@@ -109,6 +109,35 @@ class FoundationTest {
         return admin.registerAsset(code, code, "Test", "Local test");
     }
 
+    @Test
+    void registrationConstraintsRolesSessionsAndExactProfile() throws Exception {
+        String[] valid = {"R".repeat(50), "N".repeat(100), "C".repeat(100), "L".repeat(150)};
+        for (int i = 0; i < 4; i++) {
+            String[] input = valid.clone(); input[i] = " ";
+            assertThrows(AceOsServiceException.class, () -> admin.registerAsset(input[0], input[1], input[2], input[3]));
+            input[i] = valid[i] + "X";
+            assertThrows(AceOsServiceException.class, () -> admin.registerAsset(input[0], input[1], input[2], input[3]));
+        }
+        for (AceOsService denied : List.of(requester, technician, new AceOsService()))
+            assertThrows(AceOsServiceException.class, () -> denied.registerAsset("DENIED", "Name", "Category", "Room"));
+        assertTrue(admin.getAllAssets().isEmpty());
+        Asset created = admin.registerAsset(" " + valid[0] + " ", valid[1], valid[2], valid[3]);
+        assertEquals(valid[0], created.getAssetCode());
+        assertEquals(AssetStatus.ACTIVE, created.getStatus());
+        assertEquals(ManualLifecycle.ACTIVE, created.getManualLifecycle());
+        var profile = admin.getAssetProfile(created.getAssetId());
+        assertEquals(valid[1], profile.asset().getName());
+        assertTrue(profile.holds().isEmpty());
+        assertThrows(AceOsServiceException.class, () -> admin.registerAsset(valid[0], "Duplicate", "Category", "Room"));
+        assertEquals(1, admin.getAllAssets().size());
+        admin.signOut();
+        assertThrows(AceOsServiceException.class, () -> admin.registerAsset("LOGGED-OUT", "Name", "Category", "Room"));
+        admin = login(1);
+        var stale = login(2);
+        admin.deactivateAccount(2);
+        assertThrows(AceOsServiceException.class, () -> stale.registerAsset("STALE", "Name", "Category", "Room"));
+    }
+
     Complaint complaint(AceOsService who, Asset asset) throws Exception {
         return who.submitComplaint(asset.getAssetId(), "Repair needed", ComplaintPriority.HIGH);
     }

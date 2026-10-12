@@ -898,6 +898,103 @@ class UiSmokeTest {
         service.failRead = true; fx(() -> { fire(root.get(),"schedule-refresh"); return null; }); awaitControl(root.get(),"schedule-refresh"); fx(() -> { assertNull(root.get().lookup("#schedule-complete")); assertNull(root.get().lookup("#schedule-toggle")); return null; });
     }
 
+    private static final class RegistrationPreview extends AceOsService {
+        volatile boolean fail = true, failRead;
+        volatile CountDownLatch gate;
+        final java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+        @Override public com.aceos.model.User signedInUser() { return new com.aceos.model.User(1,"Admin","admin@aceos.local",com.aceos.model.UserRole.ADMINISTRATOR); }
+        @Override public com.aceos.model.Asset registerAsset(String c, String n, String cat, String loc) throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread()); writes.incrementAndGet();
+            assertEquals("CODE",c); assertEquals("Projector",n); assertEquals("Equipment",cat); assertEquals("Room 301",loc);
+            if (gate != null) try { gate.await(5,TimeUnit.SECONDS); } catch (InterruptedException e) { throw new RuntimeException(e); }
+            if (fail) throw new com.aceos.service.AceOsServiceException("Duplicate code or session denied");
+            return new com.aceos.model.Asset(303,c,n,cat,loc,com.aceos.model.AssetStatus.ACTIVE);
+        }
+        @Override public com.aceos.model.AssetProfile getAssetProfile(int id) throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread()); assertEquals(303,id);
+            if (failRead) throw new com.aceos.service.AceOsServiceException("Read failed");
+            return new com.aceos.model.AssetProfile(new com.aceos.model.Asset(id,"CODE","Projector","Equipment","Room 301",com.aceos.model.AssetStatus.ACTIVE),com.aceos.model.UserRole.ADMINISTRATOR,java.util.List.of(),java.util.List.of(),java.util.List.of(),java.util.List.of());
+        }
+        @Override public java.util.List<com.aceos.model.Asset> getAllAssets() { assertFalse(Platform.isFxApplicationThread()); return java.util.List.of(); }
+        @Override public com.aceos.model.DashboardSummary getDashboardSummary() { return new com.aceos.model.DashboardSummary(java.util.Map.of(),java.util.List.of()); }
+    }
+
+    @Test
+    void registrationRecoveryDuplicatesLayoutsAndExactProfile() throws Exception {
+        for (int[] size : new int[][] {{800,520},{1280,800}}) {
+            var service = new RegistrationPreview(); service.gate = new CountDownLatch(1);
+            var reference = new java.util.concurrent.atomic.AtomicReference<AssetManagementView>();
+            fx(() -> {
+                var root = new AssetManagementView(service); reference.set(root); new Scene(root,size[0],size[1]);
+                root.applyCss(); root.layout();
+                String[] ids = {"code","name","category","location"}, values = {"CODE","Projector","Equipment","Room 301"};
+                for (int i=0;i<4;i++) ((javafx.scene.control.TextField)root.lookup("#registration-" + ids[i])).setText(values[i]);
+                snapshot(root,size,"registration-top",true);
+                var scroll = (javafx.scene.control.ScrollPane)root.getCenter(); scroll.setVvalue(1); root.layout();
+                snapshot(root,size,"registration-action",true);
+                var bounds = root.lookup("#registration-save").localToScene(root.lookup("#registration-save").getBoundsInLocal());
+                assertTrue(bounds.getMinY()>=0 && bounds.getMaxY()<=size[1]);
+                fire(root,"registration-save"); fire(root,"registration-save");
+                assertTrue(root.lookup("#registration-code").isDisabled()); return null;
+            });
+            service.gate.countDown(); awaitControl(reference.get(),"registration-save");
+            fx(() -> {
+                assertEquals(1,service.writes.get());
+                assertEquals("Room 301",((javafx.scene.control.TextField)reference.get().lookup("#registration-location")).getText());
+                assertTrue(((javafx.scene.control.Label)reference.get().lookup("#registration-feedback")).getText().contains("retained"));
+                service.fail=false; service.gate=null; fire(reference.get(),"registration-save"); return null;
+            }); awaitControl(reference.get(),"registration-another");
+            fx(() -> {
+                assertEquals(2,service.writes.get()); assertTrue(reference.get().lookup("#registration-save").isDisabled());
+                snapshot(reference.get(),size,"registration-success",true);
+                var scroll = (javafx.scene.control.ScrollPane)reference.get().getCenter(); scroll.setVvalue(1); reference.get().layout();
+                snapshot(reference.get(),size,"registration-success-actions",true);
+                for (String id : new String[]{"registration-open","registration-another"}) {
+                    var node = reference.get().lookup("#" + id); var bounds = node.localToScene(node.getBoundsInLocal());
+                    assertTrue(bounds.getMinY()>=0 && bounds.getMaxY()<=size[1]);
+                }
+                fire(reference.get(),"registration-another");
+                assertEquals("",((javafx.scene.control.TextField)reference.get().lookup("#registration-code")).getText());
+                String[] ids = {"code","name","category","location"}, values = {"CODE","Projector","Equipment","Room 301"};
+                for (int i=0;i<4;i++) ((javafx.scene.control.TextField)reference.get().lookup("#registration-" + ids[i])).setText(values[i]);
+                fire(reference.get(),"registration-save"); return null;
+            }); awaitControl(reference.get(),"registration-another");
+            fx(() -> { service.failRead=true;
+                fire(reference.get(),"registration-open"); return null;
+            }); awaitControl(reference.get(),"asset-profile-refresh");
+            fx(() -> { assertTrue(((javafx.scene.control.Label)reference.get().lookup("#asset-profile-feedback")).getText().contains("Read failed")); service.failRead=false; fire(reference.get(),"asset-profile-refresh"); return null; });
+            awaitControl(reference.get(),"asset-profile-refresh");
+            fx(() -> { assertTrue(((javafx.scene.control.Label)reference.get().lookup("#asset-profile-details .label")).getText().length()>0); fire(reference.get(),"asset-profile-back"); return null; });
+            awaitControl(reference.get(),"asset-refresh");
+            fx(() -> {
+                for (var role : new com.aceos.model.UserRole[]{com.aceos.model.UserRole.REQUESTER,com.aceos.model.UserRole.TECHNICIAN})
+                    assertNull(new AssetManagementView(new AssetPreview(role)).lookup("#registration-save"));
+                assertNull(new AssetManagementView(new AceOsService()).lookup("#registration-save")); return null;
+            });
+        }
+    }
+
+    @Test
+    void registrationShellLayoutsAndRoleRoutes() throws Exception {
+        for (int[] size : new int[][] {{800,520},{1280,800}}) {
+            fx(() -> {
+                var root = new com.aceos.ui.WorkspaceView(new RegistrationPreview(),() -> {},() -> {});
+                new Scene(root,size[0],size[1]); root.resize(size[0],size[1]); root.navigate("register");
+                snapshot(root,size,"registration-shell-top",true);
+                var scroll = (javafx.scene.control.ScrollPane)((AssetManagementView)root.lookup("#asset-registration")).getCenter();
+                scroll.setVvalue(1); root.layout(); snapshot(root,size,"registration-shell-action",true);
+                var button = root.lookup("#registration-save"); var bounds = button.localToScene(button.getBoundsInLocal());
+                assertTrue(bounds.getMinY()>=0 && bounds.getMaxY()<=size[1]);
+                for (var role : new com.aceos.model.UserRole[]{com.aceos.model.UserRole.REQUESTER,com.aceos.model.UserRole.TECHNICIAN}) {
+                    var denied = new com.aceos.ui.WorkspaceView(new AssetPreview(role),() -> {},() -> {});
+                    assertThrows(IllegalArgumentException.class, () -> denied.navigate("register"));
+                    assertNull(denied.lookup("#asset-registration"));
+                }
+                return null;
+            });
+        }
+    }
+
     private void snapshot(Region root, int[] size, String name) throws Exception {
         snapshot(root, size, name, false);
     }

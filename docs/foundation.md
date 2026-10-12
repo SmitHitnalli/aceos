@@ -1,6 +1,6 @@
 # F1/F2 local foundation
 
-F1/F2, Phase 2 shell/role dashboards and Phase 3 complaint-to-repair, asset-profile, inspection and preventive-schedule chunks are implemented on `codex/role-based-foundation`. The published release remains v1.0.0; the next version number is undecided. Java 24, JavaFX 24.0.2, JDBC and MySQL remain the architecture. AceOS is a local college project; deployment, pre-deployment preparation, hosting/shared-backend work and production-only features are excluded.
+F1/F2, Phase 2 shell/role dashboards and Phase 3 complaint-to-repair, asset-profile, inspection, preventive-schedule and asset-registration chunks are implemented on `codex/role-based-foundation`. The published release remains v1.0.0; the next version number is undecided. Java 24, JavaFX 24.0.2, JDBC and MySQL remain the architecture. AceOS is a local college project; deployment, pre-deployment preparation, hosting/shared-backend work and production-only features are excluded.
 
 ## Accounts and authentication
 
@@ -115,7 +115,7 @@ Administrator profiles record manual lifecycle separately from effective availab
 
 Five focused checks passed (two database acceptance, three JavaFX; zero failures/errors/skips across final focused runs), plus packaging. Covered ownership/session denial, retired/historical lookup rules, administrator history, eligible/excluded evidence, stale lifecycle/hold rejection, independent holds, exact-record navigation, selected evidence, loading/retry/empty/search recovery, duplicates, retained reason and action reachability at 800×520 and 1280×800. Controlled snapshots were visually reviewed. The old ID-based F2 UI check is replaced by these connected-screen checks; unchanged F1/F2 database checks were not repeated. Private development sign-in and human keyboard/screen-reader/live-window feedback remain outstanding.
 
-Next proposed review: bounded asset-registration usability, reusing existing registration and asset-directory services, subject to a separate go-ahead. Account management refresh remains a later chunk. Edit/archive semantics, cancellation/reopening/repair-return and advanced workflows require later scope decisions. No deployment or new release/tag.
+Asset-registration usability is delivered through the existing registration and authorized profile/directory services. Account management refresh remains a later chunk requiring separate selection/go-ahead. Edit/archive semantics, cancellation/reopening/repair-return and advanced workflows require later scope decisions. No deployment or new release/tag.
 
 ## Connected inspection workflow
 
@@ -134,3 +134,11 @@ Existing services, SQL read scopes, state guards and transactions remain unchang
 Background loads/actions suppress duplicates. Failures retain asset choices, task/frequency and dates, disable stale actions and require refresh before retry. Successful writes reload details; returning reloads the list. Forms use the approved styling, scrollable layouts and inherited reduced-motion shell.
 
 Five focused checks passed (two database acceptance and three JavaFX; zero failures/errors/skips), plus packaging. Covered SQL ownership for job/inspection-assigned assets and reassignment, requester/technician mutation denial, anonymous/logout denials, dates/recurrence/pause/activation/current state, retired assets and independent manual availability. UI coverage includes dashboard queue destinations, exact row/Enter details, authorized searchable asset choices, role actions, creation and all lifecycle failure/retry paths, duplicate protection, read/empty/search/filter recovery and retained inputs. Controlled layouts and creation/completion action reachability were visually reviewed at 800×520 and 1280×800. Unchanged F1/F2 checks were not repeated. Private development sign-in and human keyboard/screen-reader/live-window credential/reset/action feedback remain outstanding.
+
+## Connected asset registration
+
+Administrators register assets with the existing four required fields: unique code (50 characters), name (100), category (100) and location (150). Length and duplicate-code validation, role/session checks, transactions and initial Active lifecycle/availability remain in the existing service/repository. No new fields or asset edit/archive/import behavior are added.
+
+The approved styled form is scrollable inside the role shell, with associated labels, length hints and Enter progression through fields; Enter in Location submits. Background submission freezes entries and suppresses duplicates. Failure retains every input and permits correction/retry. Success shows the generated ID/code/name and disables resubmission until explicit Register another asset. Open asset profile loads the exact saved ID through the authorized profile service; profile read failure can be retried independently of registration, and Back loads the authorized directory.
+
+Three focused checks passed (one database acceptance and two JavaFX; zero failures/errors/skips in final focused runs), plus packaging. Coverage includes required/max-length/duplicate-code constraints, trimming and initial state, administrator-only registration, anonymous/logout/deactivated-session denial, exact saved profile, background calls, duplicate prevention, retained input, explicit reset, profile read retry and denied role routes. Controlled standalone and shell snapshots and action reachability were visually reviewed at 800×520 and 1280×800. Private development bootstrap/sign-in and human keyboard/screen-reader/live-window credential/reset/action feedback remain outstanding. Unchanged workflow checks were not repeated. Account management refresh awaits separate selection/go-ahead; local college-project scope and frozen v1.0.0 remain preserved.
