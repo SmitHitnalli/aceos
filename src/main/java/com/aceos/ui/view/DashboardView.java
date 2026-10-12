@@ -1,213 +1,186 @@
 package com.aceos.ui.view;
 
+import com.aceos.model.DashboardSummary;
+import com.aceos.model.UserRole;
 import com.aceos.service.AceOsService;
 import com.aceos.service.AceOsServiceException;
+import com.aceos.ui.FxTasks;
 
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.layout.FlowPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
-import javafx.scene.layout.VBox;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.Consumer;
 
 public class DashboardView extends ScrollPane {
-
     private final AceOsService service;
-
-    private final Label totalAssetsValue = new Label("-");
-    private final Label activeAssetsValue = new Label("-");
-    private final Label openComplaintsValue = new Label("-");
-    private final Label activeWorkOrdersValue = new Label("-");
-    private final Label overdueSchedulesValue = new Label("-");
-    private final Label failedInspectionsValue = new Label("-");
+    private final Consumer<String> navigate;
+    private final Map<String, Label> values = new LinkedHashMap<>();
+    private final VBox updates = new VBox(12);
     private final Label feedback = new Label();
+    private final Button refresh = new Button("Refresh");
+    private final UserRole role;
 
-    public DashboardView(AceOsService service) {
+    public DashboardView(AceOsService service, Consumer<String> navigate) throws AceOsServiceException {
         this.service = service;
-
-        VBox content = new VBox(20);
-        content.setPadding(new Insets(40));
-        content.setStyle("-fx-background-color: #f8fafc;");
-
-        Label title = new Label("AceOS Dashboard");
-        title.setStyle(
-                "-fx-font-size: 28px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #1e293b;");
-
-        Label description = new Label("Live operational overview and maintenance workflow.");
-        description.setWrapText(true);
-        description.setStyle("-fx-font-size: 15px;" + "-fx-text-fill: #475569;");
-
-        Label status = new Label("CORE WORKFLOW READY");
-        status.setPadding(new Insets(8, 14, 8, 14));
-        status.setStyle(
-                "-fx-background-color: #dcfce7;"
-                        + "-fx-text-fill: #166534;"
-                        + "-fx-font-weight: bold;"
-                        + "-fx-background-radius: 16px;");
-
-        Label statisticsTitle = new Label("Live Operations");
-        statisticsTitle.setStyle(
-                "-fx-font-size: 19px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #1e293b;");
-
-        Button refreshButton = new Button("Refresh Statistics");
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        HBox statisticsHeader = new HBox(12, statisticsTitle, spacer, refreshButton);
-        statisticsHeader.setAlignment(Pos.CENTER_LEFT);
-
-        FlowPane statistics = new FlowPane();
-        statistics.setHgap(12);
-        statistics.setVgap(12);
-
-        statistics
-                .getChildren()
-                .addAll(
-                        createStatisticsCard("Total Assets", totalAssetsValue),
-                        createStatisticsCard("Active Assets", activeAssetsValue),
-                        createStatisticsCard("Open Complaints", openComplaintsValue),
-                        createStatisticsCard("Active Work Orders", activeWorkOrdersValue),
-                        createStatisticsCard("Overdue Schedules", overdueSchedulesValue),
-                        createStatisticsCard("Failed Inspections", failedInspectionsValue));
-
-        try {
-            if (service.signedInUser().getRole() != com.aceos.model.UserRole.ADMINISTRATOR) {
-                statistics.getChildren().clear();
-                statistics
-                        .getChildren()
-                        .addAll(
-                                createStatisticsCard("Your Open Complaints", openComplaintsValue),
-                                createStatisticsCard(
-                                        "Your Active Work Orders", activeWorkOrdersValue));
-                if (service.signedInUser().getRole() == com.aceos.model.UserRole.TECHNICIAN)
-                    statistics
-                            .getChildren()
-                            .add(
-                                    createStatisticsCard(
-                                            "Your Failed Inspections", failedInspectionsValue));
-                description.setText(
-                        "Your authorized records. Role dashboards arrive in the next reviewed"
-                            + " phase.");
-            }
-        } catch (AceOsServiceException e) {
-            feedback.setText("Sign in to continue");
-        }
-        Label workflowTitle = new Label("Maintenance Workflow");
-        workflowTitle.setStyle(
-                "-fx-font-size: 19px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #1e293b;");
-
-        FlowPane workflow = new FlowPane();
-        workflow.setHgap(14);
-        workflow.setVgap(14);
-
-        workflow.getChildren()
-                .addAll(
-                        createWorkflowCard("1", "Register", "Create users and register assets."),
-                        createWorkflowCard("2", "Report", "Submit and review asset complaints."),
-                        createWorkflowCard("3", "Assign", "Assign accepted work to a technician."),
-                        createWorkflowCard(
-                                "4", "Maintain", "Start work, complete it, and record the action."),
-                        createWorkflowCard(
-                                "5", "Verify", "Verify the repair and close the workflow."));
-
-        refreshButton.setOnAction(event -> loadStatistics());
-
-        content.getChildren()
-                .addAll(
-                        title,
-                        description,
-                        status,
-                        statisticsHeader,
-                        feedback,
-                        statistics,
-                        workflowTitle,
-                        workflow);
-
-        setContent(content);
+        this.navigate = navigate;
+        role = service.signedInUser().getRole();
+        setId("role-dashboard");
+        getStyleClass().add("dashboard");
         setFitToWidth(true);
         setHbarPolicy(ScrollBarPolicy.NEVER);
-        setStyle("-fx-background: #f8fafc;" + "-fx-background-color: #f8fafc;");
-
-        loadStatistics();
+        VBox content = new VBox(16);
+        content.setPadding(new Insets(24));
+        content.setMinWidth(0);
+        String heading = switch (role) {
+            case REQUESTER -> "Your complaints";
+            case TECHNICIAN -> "Your work today";
+            case ADMINISTRATOR -> "Operations overview";
+        };
+        Label title = label(heading, "title");
+        Label description = label(switch (role) {
+            case REQUESTER -> "Report an issue and follow your complaint progress.";
+            case TECHNICIAN -> "Start assigned repairs, record completion and carry out inspections.";
+            case ADMINISTRATOR -> "Review requests, assign work and verify completed repairs.";
+        }, "muted");
+        refresh.setId("dashboard-refresh");
+        refresh.setOnAction(e -> load());
+        FlowPane header = new FlowPane(12, 8, title, refresh);
+        feedback.setId("dashboard-feedback");
+        feedback.setWrapText(true);
+        feedback.setAccessibleRole(javafx.scene.AccessibleRole.TEXT);
+        FlowPane queues = new FlowPane(12, 12);
+        queues.setId("dashboard-queues");
+        switch (role) {
+            case REQUESTER -> {
+                queues.getChildren().addAll(
+                        card("open", "Open complaints", "Track progress", "complaints"),
+                        card("resolved", "Resolved complaints", "View complaints", "complaints"));
+                content.getChildren().addAll(header, description,
+                        action("Report a complaint", "report", true));
+            }
+            case TECHNICIAN -> {
+                queues.getChildren().addAll(
+                        card("assigned", "Ready to start", "Open maintenance", "maintenance"),
+                        card("started", "Repairs in progress", "Record completion", "maintenance"),
+                        card("completed", "Awaiting verification", "View jobs", "jobs"),
+                        card("inspections", "Scheduled inspections", "Complete inspection", "complete-inspection"),
+                        card("overdueInspections", "Overdue inspections", "View inspections", "inspections"));
+                content.getChildren().addAll(header, description);
+            }
+            case ADMINISTRATOR -> {
+                queues.getChildren().addAll(
+                        card("review", "Awaiting review", "Review complaints", "review"),
+                        card("assignment", "Ready for assignment", "Assign work", "assign"),
+                        card("verification", "Awaiting verification", "Verify repairs", "verify"),
+                        card("unassignedInspections", "Unassigned inspections", "Assign inspections", "assignments"),
+                        card("overdueInspections", "Overdue inspections", "View inspections", "inspections"),
+                        card("overdueSchedules", "Overdue schedules", "Manage schedules", "schedules"),
+                        card("holds", "Open safety holds", "Manage availability", "availability"));
+                content.getChildren().addAll(header, description);
+            }
+        }
+        content.getChildren().addAll(feedback, queues,
+                label(role == UserRole.REQUESTER ? "Recent progress" : role == UserRole.TECHNICIAN ? "Assigned work and inspections" : "Requests awaiting review", "section-title"),
+                updates);
+        if (role == UserRole.ADMINISTRATOR) {
+            content.getChildren().addAll(label("Management", "section-title"),
+                    new FlowPane(8, 8, action("Accounts", "accounts", false),
+                            action("Register asset", "register", false),
+                            action("Schedule inspection", "schedule-inspection", false),
+                            action("Asset directory", "assets", false)));
+        }
+        setContent(content);
+        load();
     }
 
-    private void loadStatistics() {
-
-        com.aceos.ui.FxTasks.run(
-                () -> service.getDashboardStatistics(),
-                statistics -> {
-                    totalAssetsValue.setText(String.valueOf(statistics.getTotalAssets()));
-                    activeAssetsValue.setText(String.valueOf(statistics.getActiveAssets()));
-                    openComplaintsValue.setText(String.valueOf(statistics.getOpenComplaints()));
-                    activeWorkOrdersValue.setText(String.valueOf(statistics.getActiveWorkOrders()));
-                    overdueSchedulesValue.setText(String.valueOf(statistics.getOverdueSchedules()));
-                    failedInspectionsValue.setText(
-                            String.valueOf(statistics.getFailedInspections()));
-
-                    feedback.setText("Dashboard statistics refreshed.");
-                    feedback.setStyle("-fx-text-fill: #166534;");
-                },
-                exception -> {
-                    feedback.setText(exception.getMessage());
-                    feedback.setStyle("-fx-text-fill: #dc2626;");
-                },
-                () -> {});
-    }
-
-    private VBox createStatisticsCard(String heading, Label valueLabel) {
-        valueLabel.setStyle(
-                "-fx-font-size: 28px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #2563eb;");
-
-        Label headingLabel = new Label(heading);
-        headingLabel.setWrapText(true);
-        headingLabel.setStyle("-fx-text-fill: #475569;" + "-fx-font-weight: bold;");
-
-        VBox card = new VBox(8, valueLabel, headingLabel);
-        card.setPadding(new Insets(16));
-        card.setPrefWidth(155);
-        card.setMinHeight(95);
-        card.setStyle(
-                "-fx-background-color: white;"
-                        + "-fx-border-color: #cbd5e1;"
-                        + "-fx-border-radius: 8px;"
-                        + "-fx-background-radius: 8px;");
-
+    private VBox card(String key, String heading, String action, String destination) {
+        Label value = label("—", "queue-value");
+        value.setId("dashboard-count-" + key);
+        values.put(key, value);
+        VBox card = new VBox(8, label(heading, "muted"), value, action(action, destination, false));
+        card.getStyleClass().add("dashboard-card");
+        card.setPrefWidth(224);
+        card.setMinWidth(0);
+        // Keep each card inside the viewport even with a narrow expanded navigation.
+        card.maxWidthProperty().bind(widthProperty().subtract(56));
         return card;
     }
 
-    private VBox createWorkflowCard(String step, String heading, String details) {
-        Label stepLabel = new Label(step);
-        stepLabel.setStyle(
-                "-fx-font-size: 18px;"
-                        + "-fx-font-weight: bold;"
-                        + "-fx-text-fill: white;"
-                        + "-fx-background-color: #2563eb;"
-                        + "-fx-background-radius: 18px;"
-                        + "-fx-padding: 6px 12px;");
+    private Button action(String text, String destination, boolean primary) {
+        Button button = new Button(text);
+        button.setId("dashboard-action-" + destination);
+        button.setWrapText(true);
+        button.setMaxWidth(Double.MAX_VALUE);
+        if (primary) button.getStyleClass().add("primary");
+        button.setOnAction(e -> navigate.accept(destination));
+        return button;
+    }
 
-        Label headingLabel = new Label(heading);
-        headingLabel.setStyle(
-                "-fx-font-size: 16px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #1e293b;");
+    private Label label(String text, String style) {
+        Label label = new Label(text);
+        label.setWrapText(true);
+        label.getStyleClass().add(style);
+        label.setMinWidth(0);
+        return label;
+    }
 
-        Label detailsLabel = new Label(details);
-        detailsLabel.setWrapText(true);
-        detailsLabel.setStyle("-fx-text-fill: #475569;");
+    private void load() {
+        if (refresh.isDisabled()) return;
+        refresh.setDisable(true);
+        feedback.getStyleClass().removeAll("error", "success");
+        feedback.setText("Loading your dashboard…");
+        refresh.setText("Loading…");
+        FxTasks.run(service::getDashboardSummary, this::render, error -> {
+            values.values().forEach(value -> value.setText("—"));
+            updates.getChildren().clear();
+            feedback.setText(error.getMessage() + " Use Retry to load again.");
+            feedback.getStyleClass().add("error");
+            refresh.setText("Retry");
+        }, () -> {
+            refresh.setDisable(false);
+            if (!refresh.getText().equals("Retry")) refresh.setText("Refresh");
+        });
+    }
 
-        VBox card = new VBox(12, stepLabel, headingLabel, detailsLabel);
-        card.setPadding(new Insets(18));
-        card.setPrefWidth(190);
-        card.setMinHeight(145);
-        card.setStyle(
-                "-fx-background-color: white;"
-                        + "-fx-border-color: #cbd5e1;"
-                        + "-fx-border-radius: 8px;"
-                        + "-fx-background-radius: 8px;");
+    private void render(DashboardSummary summary) {
+        values.forEach((key, value) -> value.setText(String.valueOf(summary.counts().getOrDefault(key, 0))));
+        updates.getChildren().clear();
+        if (summary.items().isEmpty()) {
+            updates.getChildren().add(label(switch (role) {
+                case REQUESTER -> "No complaints yet. Report an issue when you need help.";
+                case TECHNICIAN -> "No unfinished jobs or scheduled inspections assigned to you.";
+                case ADMINISTRATOR -> "No complaints awaiting review. Other queues are shown above.";
+            }, "muted"));
+        }
+        for (var item : summary.items()) {
+            String route = item.kind().equals("Inspection") ? "complete-inspection"
+                    : role == UserRole.TECHNICIAN ? "maintenance"
+                    : role == UserRole.ADMINISTRATOR ? "review" : "complaints";
+            if (item.status().equals("COMPLETED")) route = "jobs";
+            VBox row = new VBox(8,
+                    label(item.kind() + " #" + item.id() + " · " + item.asset(), "section-title"),
+                    label(readableStatus(item.status()), "status-label"),
+                    label(item.detail(), "muted"),
+                    action(role == UserRole.REQUESTER ? "View complaint progress" : "Open " + item.kind().toLowerCase() + " screen", route, false));
+            row.getStyleClass().add("dashboard-card");
+            updates.getChildren().add(row);
+        }
+        feedback.setText("Dashboard updated. Open a screen to act; return here for fresh counts.");
+        feedback.getStyleClass().add("success");
+    }
 
-        return card;
+    private String readableStatus(String status) {
+        return switch (status) {
+            case "SUBMITTED" -> "Awaiting administrator review";
+            case "ACCEPTED" -> "Accepted · awaiting technician assignment";
+            case "WORK_ORDER_CREATED" -> "Repair assigned · view work orders for repair progress";
+            case "RESOLVED" -> "Repair verified · complaint resolved";
+            case "REJECTED" -> "Complaint rejected";
+            case "COMPLETED" -> "Repair completed · awaiting administrator verification";
+            default -> status.replace('_', ' ').toLowerCase();
+        };
     }
 }

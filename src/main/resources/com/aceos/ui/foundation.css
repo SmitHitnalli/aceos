@@ -11,3 +11,16 @@
 .error { -fx-text-fill: #b91c1c; }
 .success { -fx-text-fill: #166534; }
 .login-card { -fx-background-color: white; -fx-background-radius: 12; -fx-padding: 32; -fx-border-color: #d5dfeb; -fx-border-radius: 12; }
+.shell-header, .shell-navigation, .shell-navigation > .viewport { -fx-background-color: #14263d; }
+.brand { -fx-text-fill: white; -fx-font-size: 24px; -fx-font-weight: bold; }
+.shell-identity, .shell-header .check-box { -fx-text-fill: #ffffff; }
+.shell-header .check-box:focused { -fx-border-color: #93c5fd; -fx-border-width: 2; -fx-border-radius: 4; }
+.nav-button { -fx-background-color: #14263d; -fx-text-fill: #ffffff; -fx-border-color: transparent; -fx-alignment: center-left; -fx-padding: 10 12; }
+.nav-button:hover { -fx-background-color: #253d59; }
+.nav-button:focused { -fx-border-color: #93c5fd; }
+.nav-active, .nav-active:hover { -fx-background-color: #1d4ed8; -fx-border-color: #93c5fd; -fx-font-weight: bold; }
+.dashboard, .dashboard > .viewport { -fx-background-color: #f4f7fb; }
+.dashboard-card { -fx-background-color: white; -fx-padding: 16; -fx-background-radius: 12; -fx-border-color: #d5dfeb; -fx-border-radius: 12; }
+.queue-value { -fx-font-size: 30px; -fx-font-weight: bold; -fx-text-fill: #1d4ed8; }
+.section-title { -fx-font-size: 17px; -fx-font-weight: bold; }
+.status-label { -fx-text-fill: #172b45; -fx-font-weight: bold; }

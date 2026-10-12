@@ -542,6 +542,11 @@ public class AceOsService {
                 this::scopedStatistics);
     }
 
+    public com.aceos.model.DashboardSummary getDashboardSummary() throws AceOsServiceException {
+        return execute(null, "getDashboardSummary", "Your dashboard could not be loaded",
+                () -> new com.aceos.repository.DashboardSummaryRepository().load());
+    }
+
     public User getUser(int userId) throws AceOsServiceException {
         requireId(userId, "User");
 

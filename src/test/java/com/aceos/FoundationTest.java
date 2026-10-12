@@ -124,6 +124,78 @@ class FoundationTest {
     }
 
     @Test
+    void roleDashboardScopesQueuesProgressAndSession() throws Exception {
+        var a = asset("DASHBOARD");
+        var own = complaint(requester, a);
+        var foreign = complaint(otherRequester, a);
+        var accepted = complaint(requester, a);
+        admin.acceptComplaint(accepted.getComplaintId());
+        assertEquals(2, admin.getDashboardSummary().counts().get("review"));
+        assertEquals(1, admin.getDashboardSummary().counts().get("assignment"));
+        var work = admin.assignWorkOrder(accepted.getComplaintId(), 5);
+        var due = admin.scheduleAssetInspection(a.getAssetId(), "Overdue", LocalDate.now());
+        // Model an inspection scheduled yesterday, without bypassing production scheduling rules.
+        try (var connection = operator(); var p = connection.prepareStatement("UPDATE asset_inspections SET scheduled_date=? WHERE inspection_id=?")) {
+            p.setDate(1, java.sql.Date.valueOf(LocalDate.now().minusDays(1)));
+            p.setInt(2, due.getInspectionId()); p.executeUpdate();
+        }
+        var unrelated = admin.scheduleAssetInspection(a.getAssetId(), "Other technician", LocalDate.now());
+        admin.assignInspection(due.getInspectionId(), 5);
+        admin.assignInspection(unrelated.getInspectionId(), 6);
+        var unassigned = admin.scheduleAssetInspection(a.getAssetId(), "Needs assignment", LocalDate.now());
+        var schedule = admin.createPreventiveMaintenanceSchedule(a.getAssetId(), "Service", 30, LocalDate.now());
+        try (var connection = operator(); var p = connection.prepareStatement("UPDATE preventive_maintenance_schedules SET next_due_date=? WHERE maintenance_schedule_id=?")) {
+            p.setDate(1, java.sql.Date.valueOf(LocalDate.now().minusDays(1)));
+            p.setInt(2, schedule.getMaintenanceScheduleId()); p.executeUpdate();
+        }
+        assertEquals(1, admin.getDashboardSummary().counts().get("overdueSchedules"));
+        admin.pausePreventiveMaintenanceSchedule(schedule.getMaintenanceScheduleId());
+        assertEquals(0, admin.getDashboardSummary().counts().get("overdueSchedules"));
+        var request = requester.getDashboardSummary();
+        assertEquals(2, request.counts().get("open"));
+        assertFalse(request.counts().containsKey("review"));
+        assertEquals(Set.of(own.getComplaintId(), accepted.getComplaintId()),
+                request.items().stream().map(DashboardSummary.Item::id).collect(java.util.stream.Collectors.toSet()));
+        assertTrue(request.items().stream().anyMatch(i -> i.detail().contains("ASSIGNED")));
+        var tech = technician.getDashboardSummary();
+        assertEquals(1, tech.counts().get("assigned"));
+        assertEquals(1, tech.counts().get("inspections"));
+        assertEquals(1, tech.counts().get("overdueInspections"));
+        assertEquals(2, tech.items().size());
+        assertTrue(otherTechnician.getDashboardSummary().items().stream().noneMatch(i -> i.kind().equals("Work order")));
+        assertEquals(1, admin.getDashboardSummary().counts().get("unassignedInspections"));
+        technician.startWorkOrder(work.getWorkOrderId());
+        assertEquals(1, technician.getDashboardSummary().counts().get("started"));
+        technician.completeWorkOrder(work.getWorkOrderId(), "Dashboard repair");
+        assertEquals(1, admin.getDashboardSummary().counts().get("verification"));
+        assertEquals(1, technician.getDashboardSummary().counts().get("completed"));
+        technician.completeAssetInspection(due.getInspectionId(), InspectionStatus.FAILED, "Unsafe", LocalDate.now());
+        assertEquals(1, admin.getDashboardSummary().counts().get("holds"));
+        assertEquals(0, technician.getDashboardSummary().counts().get("inspections"));
+        admin.verifyWorkOrder(work.getWorkOrderId());
+        assertEquals(1, requester.getDashboardSummary().counts().get("resolved"));
+        assertEquals(0, admin.getDashboardSummary().counts().get("verification"));
+        assertEquals(1, admin.getDashboardSummary().counts().get("holds"), "Verification does not clear a safety hold");
+        assertTrue(technician.getDashboardSummary().items().isEmpty());
+        denied(() -> new AceOsService().getDashboardSummary());
+        requester.signOut();
+        denied(requester::getDashboardSummary);
+    }
+
+    @Test
+    void dashboardRecentRowsAreBoundedAfterOwnershipFilter() throws Exception {
+        var a = asset("RECENT");
+        for (int i = 0; i < 8; i++) complaint(requester, a);
+        for (int i = 0; i < 8; i++) complaint(otherRequester, a);
+        assertEquals(8, requester.getDashboardSummary().counts().get("open"));
+        assertEquals(6, requester.getDashboardSummary().items().size());
+        var ownIds = requester.getAllComplaints().stream().map(Complaint::getComplaintId).toList();
+        assertTrue(requester.getDashboardSummary().items().stream().allMatch(i -> ownIds.contains(i.id())));
+        assertEquals(16, admin.getDashboardSummary().counts().get("review"));
+        assertEquals(6, admin.getDashboardSummary().items().size());
+    }
+
+    @Test
     void accountCreationActivationResetAndExpiration() throws Exception {
         User user = admin.registerUser("New account", " New@Aceos.Local ", UserRole.REQUESTER);
         denied(() -> new AceOsService().signIn(user.getEmail(), PASSWORD));

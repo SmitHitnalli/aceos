@@ -1,0 +1,179 @@
+package com.aceos.ui;
+
+import com.aceos.model.UserRole;
+import com.aceos.service.AceOsService;
+import com.aceos.service.AceOsServiceException;
+import com.aceos.ui.view.*;
+
+import javafx.animation.FadeTransition;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+import javafx.util.Duration;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.Supplier;
+
+/** Role navigation is an allow-list; all destinations still enforce service permissions. */
+public final class WorkspaceView extends BorderPane {
+    private record Destination(Button button, Supplier<Node> view) {}
+    private final Map<String, Destination> destinations = new LinkedHashMap<>();
+    private final VBox navigation = new VBox(8);
+    private final ScrollPane navigationScroll = new ScrollPane(navigation);
+    private final Label screen = new Label();
+    private final CheckBox reducedMotion = new CheckBox("Reduce motion");
+    private final Button menu = new Button("Hide menu");
+    private boolean narrow;
+    private FadeTransition transition;
+
+    public WorkspaceView(AceOsService service, Runnable logout, Runnable passwordChanged) throws AceOsServiceException {
+        setId("workspace");
+        var user = service.signedInUser();
+        var role = user.getRole();
+        Label brand = new Label("AceOS");
+        brand.getStyleClass().add("brand");
+        Label identity = new Label(user.getName() + " · " + role.name().toLowerCase());
+        identity.setWrapText(true);
+        identity.setMinWidth(0);
+        identity.getStyleClass().add("shell-identity");
+        Button account = new Button("My account");
+        account.setId("shell-account");
+        account.setOnAction(e -> {
+            select(null, "My account", new AccountView(service, false, passwordChanged, logout));
+        });
+        Button signOut = new Button("Sign out");
+        signOut.setId("shell-logout");
+        signOut.setOnAction(e -> logout.run());
+        menu.setId("shell-menu");
+        menu.setOnAction(e -> setMenuVisible(getLeft() == null));
+        reducedMotion.setSelected(Boolean.getBoolean("aceos.reducedMotion"));
+        reducedMotion.setId("shell-reduced-motion");
+        reducedMotion.setOnAction(e -> {
+            if (reducedMotion.isSelected() && transition != null) {
+                transition.stop();
+                if (getCenter() != null) getCenter().setOpacity(1);
+            }
+        });
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox heading = new HBox(12, brand, identity, spacer, account, signOut);
+        heading.setAlignment(Pos.CENTER_LEFT);
+        HBox controls = new HBox(12, menu, screen, reducedMotion);
+        controls.setAlignment(Pos.CENTER_LEFT);
+        screen.setMinWidth(0);
+        screen.getStyleClass().add("shell-identity");
+        VBox header = new VBox(8, heading, controls);
+        header.setPadding(new Insets(12, 16, 12, 16));
+        header.getStyleClass().add("shell-header");
+        setTop(header);
+        navigation.setPadding(new Insets(16, 12, 16, 12));
+        navigation.getStyleClass().add("shell-navigation");
+        navigationScroll.getStyleClass().add("shell-navigation");
+        navigationScroll.setFitToWidth(true);
+        navigationScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        navigationScroll.setPrefWidth(216);
+        navigationScroll.setMinWidth(216);
+        add("dashboard", "Dashboard", () -> dashboard(service));
+        if (role == UserRole.REQUESTER) {
+            add("report", "Report complaint", () -> new ComplaintManagementView(service));
+            add("complaints", "My complaints", () -> new ComplaintDirectoryView(service));
+            add("jobs", "Repair progress", () -> new WorkOrderDirectoryView(service));
+            add("assets", "Reporting assets", () -> new AssetDirectoryView(service));
+        } else if (role == UserRole.TECHNICIAN) {
+            add("maintenance", "My maintenance", () -> new WorkOrderLifecycleView(service));
+            add("jobs", "Assigned jobs", () -> new WorkOrderDirectoryView(service));
+            add("complete-inspection", "Complete inspection", () -> new AssetInspectionManagementView(service));
+            add("inspections", "Assigned inspections", () -> new AssetInspectionDirectoryView(service));
+            add("complaints", "Linked complaints", () -> new ComplaintDirectoryView(service));
+            add("assets", "Assigned assets", () -> new AssetDirectoryView(service));
+        } else {
+            add("review", "Review complaints", () -> new ComplaintReviewView(service));
+            add("assign", "Assign work", () -> new WorkOrderManagementView(service));
+            add("verify", "Verify maintenance", () -> new WorkOrderVerificationView(service));
+            add("assignments", "Assignments", () -> new AssignmentView(service));
+            add("availability", "Asset availability", () -> new AssetAvailabilityView(service));
+            add("schedules", "Manage schedules", () -> new PreventiveMaintenanceManagementView(service));
+            add("schedule-inspection", "Schedule inspections", () -> new AssetInspectionManagementView(service));
+            add("inspections", "Inspection directory", () -> new AssetInspectionDirectoryView(service));
+            add("schedule-directory", "Schedule directory", () -> new PreventiveMaintenanceDirectoryView(service));
+            add("complaints", "Complaint directory", () -> new ComplaintDirectoryView(service));
+            add("jobs", "Work order directory", () -> new WorkOrderDirectoryView(service));
+            add("assets", "Asset directory", () -> new AssetDirectoryView(service));
+            add("register", "Register assets", () -> new AssetManagementView(service));
+            add("accounts", "Accounts", () -> new AccountManagementView(service));
+            add("users", "User directory", () -> new UserDirectoryView(service));
+        }
+        widthProperty().addListener((observable, before, after) -> {
+            boolean small = after.doubleValue() < 960;
+            if (small != narrow) {
+                narrow = small;
+                setMenuVisible(!small);
+            }
+        });
+        setMenuVisible(true);
+        navigate("dashboard");
+    }
+
+    private Node dashboard(AceOsService service) {
+        try {
+            return new DashboardView(service, this::navigate);
+        } catch (AceOsServiceException e) {
+            Label error = new Label(e.getMessage() + " Sign out and sign in again.");
+            error.setWrapText(true);
+            error.getStyleClass().add("error");
+            return new VBox(16, error);
+        }
+    }
+
+    private void add(String key, String text, Supplier<Node> view) {
+        Button button = new Button(text);
+        button.setId("nav-" + key);
+        button.setMaxWidth(Double.MAX_VALUE);
+        button.setWrapText(true);
+        button.getStyleClass().add("nav-button");
+        button.setOnAction(e -> navigate(key));
+        destinations.put(key, new Destination(button, view));
+        navigation.getChildren().add(button);
+    }
+
+    public void navigate(String key) {
+        Destination destination = destinations.get(key);
+        if (destination == null) throw new IllegalArgumentException("Screen unavailable for this role");
+        select(key, destination.button().getText(), destination.view().get());
+        if (narrow) setMenuVisible(false);
+    }
+
+    private void select(String key, String title, Node view) {
+        if (transition != null) transition.stop();
+        destinations.forEach((route, destination) -> {
+            destination.button().getStyleClass().remove("nav-active");
+            boolean active = route.equals(key);
+            if (active) destination.button().getStyleClass().add("nav-active");
+            destination.button().setAccessibleText(destination.button().getText() + (active ? ", current screen" : ""));
+        });
+        screen.setText(title);
+        screen.setAccessibleText("Current screen: " + title);
+        // Existing forms remain scrollable in the refreshed shell; their redesign is Phase 3.
+        if (!(view instanceof ScrollPane)) {
+            ScrollPane scroll = new ScrollPane(view);
+            scroll.setFitToWidth(true);
+            view = scroll;
+        }
+        setCenter(view);
+        if (!reducedMotion.isSelected()) {
+            transition = new FadeTransition(Duration.millis(120), view);
+            transition.setFromValue(0.85);
+            transition.setToValue(1);
+            transition.play();
+        }
+    }
+
+    private void setMenuVisible(boolean visible) {
+        setLeft(visible ? navigationScroll : null);
+        menu.setText(visible ? "Hide menu" : "Show menu");
+        menu.setAccessibleText(menu.getText() + ", navigation " + (visible ? "expanded" : "collapsed"));
+    }
+}

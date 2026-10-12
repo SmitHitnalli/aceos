@@ -4,7 +4,7 @@ AceOS (Asset, Compliance & Equipment Operations System) is a JavaFX desktop appl
 
 ## Current state
 
-**F1/F2 foundation is implemented and locally verified on `codex/role-based-foundation`.** It adds login/accounts, service-enforced roles and ownership, inspection assignment, data-preserving migrations and automated tests. The published [v1.0.0 release](https://github.com/SmitHitnalli/aceos/releases/tag/v1.0.0) remains preserved. The next release number is undecided; the Maven version is still 1.0.0, so branch build output must not be mistaken for the frozen release.
+**F1/F2 foundation and Phase 2 role workspaces are implemented and locally verified on `codex/role-based-foundation`.** They add login/accounts, service-enforced roles and ownership, inspection assignment, data-preserving migrations, a refreshed shell and actionable dashboards. The published [v1.0.0 release](https://github.com/SmitHitnalli/aceos/releases/tag/v1.0.0) remains preserved. The next release number is undecided; the Maven version is still 1.0.0, so branch build output must not be mistaken for the frozen release.
 
 The stack remains Java 24, JavaFX 24.0.2, JDBC/MySQL 8 and Maven. Java models hold lifecycle rules, services enforce identity/permissions and coordinate transactions, and repositories contain SQL. JavaFX database operations run in the background.
 
@@ -20,10 +20,13 @@ The stack remains Java 24, JavaFX 24.0.2, JDBC/MySQL 8 and Maven. Java models ho
 - Failed inspections atomically create auditable safety holds. Only administrators can clear a hold, with a reason and a later passing reinspection or verified corrective repair on the same asset. A passing result alone does not clear a hold.
 - Administrator availability controls manage manual Out-of-service/Active and guarded retirement. Requesters can report non-retired assets even during repair or a hold. Retirement requires all jobs/inspections finished and preventive schedules paused.
 - Preventive schedules retain creation, pause, activation and recurring completion; inspections support assignment and technician pass/fail completion.
-- Existing searchable directories and forms remain available through role-gated navigation. Login/password/account additions use the approved Segoe UI, navy/blue/light visual direction.
+- Refreshed Segoe UI/navy-blue/light shell with role navigation, active-screen feedback, account/sign-out controls, a collapsible menu, a short screen transition and a Reduce motion switch (`-Daceos.reducedMotion=true` defaults it on).
+- Requester dashboard shows own open/resolved totals and six recent complaints with linked repair progress. Technician dashboard shows assigned/in-progress/completed repair queues, scheduled/overdue inspections and bounded assigned rows. Administrator dashboard shows review, assignment, verification, unassigned/overdue inspection, overdue schedule and open safety-hold queues, plus management shortcuts.
+- Dashboard actions open existing authorized screens; use the displayed record IDs in current forms. Counts and recent rows load together in a background authorized operation; refresh suppresses duplicate requests and supports loading, empty and retry states. Returning to Dashboard reloads its data.
+- Existing searchable directories and forms remain available through role navigation; their connected redesign remains Phase 3.
 - Numbered migrations preserve existing users, operational IDs and references. Migrated accounts await activation; existing scheduled inspections remain unassigned.
 
-The full role-dashboard/shell refresh is Phase 2, and connected lists/details/selectors are Phase 3. Phase 2 shell/three-role-dashboard review is the next chunk. All development/testing is local; deployment comes last.
+Phase 2 shell/three-role-dashboard work is delivered. Connected lists/details/selectors and consistent form styling remain Phase 3, awaiting a separate scope go-ahead. All development/testing is local; deployment comes last.
 
 ## Setup and run
 
@@ -53,6 +56,8 @@ mvn verify
 Password/session unit tests run without MySQL. Database acceptance checks need `ACEOS_DB_URL` naming **aceos_next_test**, the restricted runtime credentials and `ACEOS_TEST_OPERATOR_USER` / `ACEOS_TEST_OPERATOR_PASSWORD` for disposable fixtures. They refuse development/original database URLs. Set `ACEOS_UI_TEST=true` to include JavaFX layout/input-recovery checks, including the F2 availability controls and asset statuses. See `target/surefire-reports` and `target/ui-checks` for results.
 
 F2 verification passed 25 relevant checks across focused runs: 21 database acceptance checks, 3 password/session unit checks and 1 changed-screen JavaFX check at 800×520 and 1280×800. Unchanged F1 UI checks were not repeated. Both isolated pre-F2 backups were restored and compared before migration. V002 refuses inconsistent legacy rows and historical failed-inspection ambiguity until a mapping is reviewed; no automatic reinterpretation or down migration.
+
+Phase 2 verification passed four focused checks (two database acceptance and two JavaFX), with no failures/errors/skips, plus packaging. They cover scoped queue transitions and ownership, bounded recent rows, anonymous/logged-out denial, overdue schedules/inspections, safety holds surviving verification, all dashboard destinations, forbidden role navigation, active-screen/account/logout controls, responsive layouts at 800×520 and 1280×800, reduced motion, background loading, duplicate refresh, failure/retry and empty states. UI snapshots use controlled display fixtures; private sign-in and human keyboard/screen-reader/live-window action feedback remain outstanding.
 
 Obsolete standalone verification classes have been removed from application source; current automated tests are under `src/test/java`. The frozen v1.0.0 tag retains its original executable checks and setup instructions.
 

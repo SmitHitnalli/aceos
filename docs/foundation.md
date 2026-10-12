@@ -1,6 +1,6 @@
 # F1/F2 local foundation
 
-F1/F2 are implemented on `codex/role-based-foundation`. The published release remains v1.0.0; the next version number is undecided. Java 24, JavaFX 24.0.2, JDBC and MySQL remain the architecture. Full dashboard/shell refresh is Phase 2; connected screens are Phase 3; deployment is last.
+F1/F2 and Phase 2 shell/role dashboards are implemented on `codex/role-based-foundation`. The published release remains v1.0.0; the next version number is undecided. Java 24, JavaFX 24.0.2, JDBC and MySQL remain the architecture. Connected screens are Phase 3; deployment is last.
 
 ## Accounts and authentication
 
@@ -99,4 +99,8 @@ Administrator navigation includes **Asset Availability** for ID-based loading, l
 
 ## Next chunk
 
-F2 availability and safety holds are implemented and locally verified. Review the Phase 2 shell/three-role-dashboard chunk next; connected-screen refresh remains Phase 3. The approved Segoe UI/navy-blue/light direction remains. No deployment or new release/tag during F2.
+Phase 2 shell and three role dashboards are implemented and locally verified. Role-specific queues and bounded recent progress load through one authorized background service operation. Actions open existing scoped screens; ID entry remains until Phase 3. The shell includes active navigation, collapsible small-window menus, account/logout and a 120ms fade disabled by Reduce motion or the `aceos.reducedMotion` JVM property.
+
+Four focused Phase 2 checks passed (two database, two JavaFX; zero failures/errors/skips) with packaging. Coverage includes ownership before bounded retrieval, queue/workflow transitions, overdue scheduled work, safety holds surviving verification, anonymous/logout denials, dashboard destinations and forbidden navigation, account/logout, active navigation, 800×520 and 1280×800 layouts, reduced-motion cancellation, background loading, duplicate refresh and error/retry/empty recovery. Unchanged F1/F2 checks were not repeated. Controlled snapshots do not complete private development sign-in or human keyboard/screen-reader/live-window feedback checks.
+
+Review Phase 3 connected lists/details/actions, searchable selectors, complaint/work timelines and asset profiles/history next; wait for its separate go-ahead. Apply the approved visual direction across those existing screens. No deployment or new release/tag during Phase 2.
