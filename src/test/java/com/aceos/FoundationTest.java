@@ -410,6 +410,33 @@ class FoundationTest {
     }
 
     @Test
+    void accountDirectoryExactStatesAndUnauthorizedActions() throws Exception {
+        User created = admin.registerUser("  Local account  ", " Case@Aceos.Local ", UserRole.REQUESTER);
+        int id = created.getUserId();
+        var pending = admin.getAccounts().stream().filter(a -> a.userId() == id).findFirst().orElseThrow();
+        assertEquals("Local account",pending.name()); assertEquals("Case@Aceos.Local",pending.email());
+        assertEquals("PENDING_ACTIVATION",pending.state()); assertTrue(pending.passwordChangeRequired());
+        IssuedCredential activation = admin.issueCredential(id);
+        AceOsService account = new AceOsService(); account.signIn(created.getEmail(),activation.secret()); account.changePassword(activation.secret(),PASSWORD);
+        var active = admin.getAccounts().stream().filter(a -> a.userId() == id).findFirst().orElseThrow();
+        assertEquals("ACTIVE",active.state()); assertFalse(active.passwordChangeRequired());
+        admin.deactivateAccount(id); denied(account::getAllComplaints); denied(() -> admin.issueCredential(id));
+        assertEquals("DISABLED",admin.getAccounts().stream().filter(a -> a.userId() == id).findFirst().orElseThrow().state());
+        IssuedCredential reactivation = admin.reactivateAccount(id);
+        assertEquals(id,reactivation.userId()); account.signIn(created.getEmail(),reactivation.secret()); account.changePassword(reactivation.secret(),PASSWORD);
+        admin.changeAccountRole(id,UserRole.TECHNICIAN); denied(account::getAllComplaints);
+        assertEquals(UserRole.TECHNICIAN,admin.getAccounts().stream().filter(a -> a.userId() == id).findFirst().orElseThrow().role());
+        for (AceOsService deniedService : List.of(new AceOsService(), requester, technician)) {
+            denied(deniedService::getAccounts);
+            denied(() -> deniedService.registerUser("Denied", "denied@aceos.local",UserRole.REQUESTER));
+            denied(() -> deniedService.issueCredential(id)); denied(() -> deniedService.reactivateAccount(id));
+            denied(() -> deniedService.deactivateAccount(id)); denied(() -> deniedService.unlockAccount(id));
+            denied(() -> deniedService.changeAccountRole(id,UserRole.REQUESTER));
+        }
+        admin.signOut(); denied(admin::getAccounts); denied(() -> admin.unlockAccount(id));
+    }
+
+    @Test
     void accountCreationActivationResetAndExpiration() throws Exception {
         User user = admin.registerUser("New account", " New@Aceos.Local ", UserRole.REQUESTER);
         denied(() -> new AceOsService().signIn(user.getEmail(), PASSWORD));

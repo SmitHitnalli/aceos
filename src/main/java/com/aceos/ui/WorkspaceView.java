@@ -171,9 +171,10 @@ public final class WorkspaceView extends BorderPane {
         screen.setText(title);
         screen.setAccessibleText("Current screen: " + title);
         // Existing forms remain scrollable in the refreshed shell; their redesign is Phase 3.
-        if (!(view instanceof ScrollPane) && !(view instanceof AssetDirectoryView) && !(view instanceof AssetManagementView)) {
+        if (!(view instanceof ScrollPane) && !(view instanceof AssetDirectoryView) && !(view instanceof AssetManagementView) && !(view instanceof AccountManagementView)) {
             ScrollPane scroll = new ScrollPane(view);
             scroll.setFitToWidth(true);
+            if (view instanceof AccountView) scroll.getStyleClass().add("dashboard");
             view = scroll;
         }
         setCenter(view);

@@ -995,6 +995,163 @@ class UiSmokeTest {
         }
     }
 
+    private static class AccountsPreview extends AceOsService {
+        final java.util.concurrent.atomic.AtomicInteger reads = new java.util.concurrent.atomic.AtomicInteger(), writes = new java.util.concurrent.atomic.AtomicInteger();
+        volatile boolean failRead, failWrite, empty;
+        volatile CountDownLatch gate;
+        volatile int lastId;
+        volatile com.aceos.model.UserRole lastRole;
+        volatile java.util.List<com.aceos.security.AccountSummary> accounts = java.util.List.of(
+                new com.aceos.security.AccountSummary(1,"Example administrator","admin@aceos.local",com.aceos.model.UserRole.ADMINISTRATOR,"ACTIVE",false,false),
+                new com.aceos.security.AccountSummary(25,"Example technician","tech@aceos.local",com.aceos.model.UserRole.TECHNICIAN,"ACTIVE",false,true),
+                new com.aceos.security.AccountSummary(47,"Disabled requester","requester@aceos.local",com.aceos.model.UserRole.REQUESTER,"DISABLED",true,false));
+        @Override public com.aceos.model.User signedInUser() { return new com.aceos.model.User(1,"Example administrator","admin@aceos.local",com.aceos.model.UserRole.ADMINISTRATOR); }
+        @Override public com.aceos.model.DashboardSummary getDashboardSummary() { return new com.aceos.model.DashboardSummary(java.util.Map.of(),java.util.List.of()); }
+        @Override public java.util.List<com.aceos.security.AccountSummary> getAccounts() throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread()); reads.incrementAndGet(); waitGate();
+            if (failRead) throw new com.aceos.service.AceOsServiceException("Account read failed");
+            return empty ? java.util.List.of() : accounts;
+        }
+        void waitGate() { if (gate != null) try { gate.await(5,TimeUnit.SECONDS); } catch (InterruptedException e) { throw new RuntimeException(e); } }
+        void write(int id) throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread()); lastId=id; writes.incrementAndGet(); waitGate();
+            if (failWrite) throw new com.aceos.service.AceOsServiceException("Guarded action rejected");
+        }
+        @Override public com.aceos.model.User registerUser(String n,String e,com.aceos.model.UserRole r) throws com.aceos.service.AceOsServiceException {
+            write(88); assertEquals("New local account",n); assertEquals("new@aceos.local",e); assertEquals(com.aceos.model.UserRole.REQUESTER,r);
+            var user = new com.aceos.model.User(88,n,e,r);
+            accounts = java.util.stream.Stream.concat(accounts.stream(),java.util.stream.Stream.of(new com.aceos.security.AccountSummary(88,n,e,r,"PENDING_ACTIVATION",true,false))).toList();
+            return user;
+        }
+        @Override public void changeAccountRole(int id,com.aceos.model.UserRole role) throws com.aceos.service.AceOsServiceException { write(id); lastRole=role; }
+        @Override public void unlockAccount(int id) throws com.aceos.service.AceOsServiceException { write(id); }
+        @Override public void deactivateAccount(int id) throws com.aceos.service.AceOsServiceException { write(id); }
+        @Override public com.aceos.security.IssuedCredential issueCredential(int id) throws com.aceos.service.AceOsServiceException { write(id); return new com.aceos.security.IssuedCredential(id,"Disposable UI fixture only",java.time.Instant.now().plusSeconds(86400)); }
+        @Override public com.aceos.security.IssuedCredential reactivateAccount(int id) throws com.aceos.service.AceOsServiceException { return issueCredential(id); }
+    }
+    private void approveAccountDialog() {
+        Platform.runLater(() -> {
+            for (var window : java.util.List.copyOf(javafx.stage.Window.getWindows())) {
+                if (window.getScene() != null && window.getScene().getRoot() instanceof javafx.scene.control.DialogPane pane
+                        && pane.getButtonTypes().contains(javafx.scene.control.ButtonType.OK))
+                    ((javafx.scene.control.Button)pane.lookupButton(javafx.scene.control.ButtonType.OK)).fire();
+            }
+        });
+    }
+    @SuppressWarnings("unchecked")
+    private javafx.scene.control.TableView<com.aceos.security.AccountSummary> accountsTable(javafx.scene.Node root) {
+        return (javafx.scene.control.TableView<com.aceos.security.AccountSummary>)root.lookup("#accounts-table");
+    }
+    @Test
+    void accountsCreationSearchAndReadRecovery() throws Exception {
+        var service = new AccountsPreview(); service.gate = new CountDownLatch(1);
+        var reference = new java.util.concurrent.atomic.AtomicReference<AccountManagementView>();
+        fx(() -> { var root=new AccountManagementView(service); reference.set(root); new Scene(root,800,520); fire(root,"accounts-refresh"); return null; });
+        service.gate.countDown(); awaitControl(reference.get(),"accounts-refresh"); service.gate=null;
+        fx(() -> {
+            var root=reference.get(); assertEquals(1,service.reads.get());
+            ((javafx.scene.control.TextField)root.lookup("#accounts-search")).setText("TECH@ACEOS"); assertEquals(1,accountsTable(root).getItems().size());
+            ((javafx.scene.control.TextField)root.lookup("#accounts-search")).clear();
+            ((javafx.scene.control.ComboBox<String>)root.lookup("#accounts-state")).setValue("DISABLED"); assertEquals(47,accountsTable(root).getItems().getFirst().userId());
+            fire(root,"accounts-new"); root.applyCss(); root.layout(); ((javafx.scene.control.TextField)root.lookup("#accounts-name")).setText("New local account");
+            ((javafx.scene.control.TextField)root.lookup("#accounts-email")).setText("new@aceos.local");
+            service.failWrite=true; service.gate=new CountDownLatch(1); fire(root,"accounts-create"); fire(root,"accounts-create"); assertTrue(root.lookup("#accounts-name").isDisabled()); return null;
+        }); service.gate.countDown(); awaitControl(reference.get(),"accounts-create"); service.gate=null;
+        fx(() -> { var root=reference.get(); assertEquals(1,service.writes.get()); assertEquals("new@aceos.local",((javafx.scene.control.TextField)root.lookup("#accounts-email")).getText());
+            service.failWrite=false; fire(root,"accounts-create"); return null; }); awaitControl(reference.get(),"accounts-refresh");
+        fx(() -> { var root=reference.get(); assertEquals(2,service.writes.get()); assertEquals(88,accountsTable(root).getSelectionModel().getSelectedItem().userId());
+            accountsTable(root).fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,"","",javafx.scene.input.KeyCode.ENTER,false,false,false,false));
+            root.applyCss(); root.layout(); assertTrue(((javafx.scene.control.Label)root.lookup("#accounts-details")).getText().contains("Account #88"));
+            assertTrue(((javafx.scene.control.Label)root.lookup("#accounts-details")).getText().contains("PENDING_ACTIVATION"));
+            service.failRead=true; fire(root,"accounts-refresh"); return null; }); awaitControl(reference.get(),"accounts-refresh");
+        fx(() -> { assertTrue(reference.get().lookup("#accounts-issue").isDisabled()); service.failRead=false; service.empty=true; fire(reference.get(),"accounts-refresh"); return null; }); awaitControl(reference.get(),"accounts-refresh");
+        fx(() -> { assertTrue(((javafx.scene.control.Label)reference.get().lookup("#accounts-details")).getText().contains("no longer available")); assertTrue(reference.get().lookup("#accounts-issue").isDisabled());
+            service.empty=false; fire(reference.get(),"accounts-back"); return null; }); awaitControl(reference.get(),"accounts-refresh");
+    }
+    @Test
+    void accountsExactActionsStaleRecoveryAndOneTimeCredential() throws Exception {
+        var service=new AccountsPreview(); var reference=new java.util.concurrent.atomic.AtomicReference<AccountManagementView>();
+        fx(() -> { var root=new AccountManagementView(service); reference.set(root); new Scene(root,800,520); return null; }); awaitControl(reference.get(),"accounts-refresh");
+        fx(() -> { var root=reference.get(); accountsTable(root).getSelectionModel().select(1); fire(root,"accounts-open"); root.applyCss(); root.layout();
+            ((javafx.scene.control.ComboBox<com.aceos.model.UserRole>)root.lookup("#accounts-role")).setValue(com.aceos.model.UserRole.REQUESTER);
+            service.failWrite=true; service.gate=new CountDownLatch(1); approveAccountDialog(); fire(root,"accounts-role-save"); fire(root,"accounts-role-save"); return null; });
+        service.gate.countDown(); awaitControl(reference.get(),"accounts-refresh"); service.gate=null;
+        fx(() -> { var root=reference.get(); assertEquals(1,service.writes.get()); assertEquals(25,service.lastId); assertTrue(root.lookup("#accounts-role-save").isDisabled());
+            assertEquals(com.aceos.model.UserRole.REQUESTER,((javafx.scene.control.ComboBox<?>)root.lookup("#accounts-role")).getValue());
+            service.failWrite=false; fire(root,"accounts-refresh"); return null; }); awaitControl(reference.get(),"accounts-refresh");
+        fx(() -> { approveAccountDialog(); fire(reference.get(),"accounts-role-save"); return null; }); awaitControl(reference.get(),"accounts-refresh");
+        assertEquals(2,service.writes.get()); assertEquals(25,service.lastId); assertEquals(com.aceos.model.UserRole.REQUESTER,service.lastRole);
+        fx(() -> { approveAccountDialog(); fire(reference.get(),"accounts-unlock"); return null; }); awaitControl(reference.get(),"accounts-refresh"); assertEquals(25,service.lastId);
+        fx(() -> { fire(reference.get(),"accounts-back"); return null; }); awaitControl(reference.get(),"accounts-refresh");
+        fx(() -> { var root=reference.get(); accountsTable(root).getSelectionModel().select(0); fire(root,"accounts-open"); root.applyCss(); root.layout(); assertTrue(root.lookup("#accounts-deactivate").isDisabled()); assertTrue(root.lookup("#accounts-role-save").isDisabled()); fire(root,"accounts-back"); return null; }); awaitControl(reference.get(),"accounts-refresh");
+        fx(() -> { var root=reference.get(); accountsTable(root).getSelectionModel().select(2); fire(root,"accounts-open"); root.applyCss(); root.layout(); assertTrue(root.lookup("#accounts-issue").isDisabled()); assertFalse(root.lookup("#accounts-reactivate").isDisabled()); return null; });
+        var secretField=new java.util.concurrent.atomic.AtomicReference<javafx.scene.control.TextField>();
+        var dialogSeen=new CountDownLatch(1);
+        var closer=Executors.newSingleThreadScheduledExecutor();
+        var poll=closer.scheduleAtFixedRate(() -> Platform.runLater(() -> {
+            for (var window : java.util.List.copyOf(javafx.stage.Window.getWindows())) {
+                if (window.getScene() != null && window.getScene().getRoot() instanceof javafx.scene.control.DialogPane pane
+                        && pane.getButtonTypes().contains(javafx.scene.control.ButtonType.CLOSE)) {
+                    var field=(javafx.scene.control.TextField)pane.lookup(".text-field");
+                    assertEquals("Disposable UI fixture only",field.getText()); secretField.set(field); dialogSeen.countDown();
+                    ((javafx.scene.control.Button)pane.lookupButton(javafx.scene.control.ButtonType.CLOSE)).fire();
+                }
+            }
+        }),20,20,TimeUnit.MILLISECONDS);
+        try {
+            fx(() -> { approveAccountDialog(); fire(reference.get(),"accounts-reactivate"); return null; });
+            assertTrue(dialogSeen.await(5,TimeUnit.SECONDS)); awaitControl(reference.get(),"accounts-refresh");
+            fx(() -> { assertEquals("",secretField.get().getText()); assertTrue(((javafx.scene.control.Label)reference.get().lookup("#accounts-feedback")).getText().contains("cannot be displayed again")); return null; });
+            assertEquals(47,service.lastId);
+        } finally { poll.cancel(false); closer.shutdownNow(); }
+    }
+    @Test
+    void accountsShellLayoutsRoleRoutesAndOwnPasswordRecovery() throws Exception {
+        for (int[] size : new int[][]{{800,520},{1280,800}}) {
+            var service=new AccountsPreview(); var reference=new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+            fx(() -> { var root=new com.aceos.ui.WorkspaceView(service,() -> {},() -> {}); reference.set(root); new Scene(root,size[0],size[1]); root.resize(size[0],size[1]); root.applyCss(); root.layout(); root.navigate("accounts"); return null; });
+            awaitControl(reference.get(),"accounts-refresh");
+            fx(() -> { var root=reference.get(); snapshot(root,size,"accounts-shell-list",true);
+                for (String id : new String[]{"accounts-new","accounts-open"}) { var node=root.lookup("#"+id); var b=node.localToScene(node.getBoundsInLocal()); assertTrue(b.getMinY()>=0 && b.getMaxY()<=size[1],id+" reachable"); }
+                accountsTable(root).getSelectionModel().select(1); fire(root,"accounts-open"); root.applyCss(); root.layout(); snapshot(root,size,"accounts-shell-detail",true);
+                var scroll=(javafx.scene.control.ScrollPane)((AccountManagementView)root.lookup("#account-management")).getCenter(); scroll.setVvalue(1); root.layout(); snapshot(root,size,"accounts-shell-actions",true);
+                var node=root.lookup("#accounts-role-save"); var b=node.localToScene(node.getBoundsInLocal()); assertTrue(b.getMinY()>=0 && b.getMaxY()<=size[1]);
+                fire(root,"accounts-back"); return null; }); awaitControl(reference.get(),"accounts-refresh");
+            fx(() -> { var root=reference.get(); fire(root,"accounts-new"); snapshot(root,size,"accounts-shell-create",true);
+                var scroll=(javafx.scene.control.ScrollPane)((AccountManagementView)root.lookup("#account-management")).getCenter(); scroll.setVvalue(1); root.layout(); snapshot(root,size,"accounts-shell-create-action",true);
+                var node=root.lookup("#accounts-create"); var b=node.localToScene(node.getBoundsInLocal()); assertTrue(b.getMinY()>=0 && b.getMaxY()<=size[1]);
+                root.navigate("users"); assertTrue(root.getCenter() instanceof UserDirectoryView);
+                fire(root,"shell-account"); snapshot(root,size,"accounts-shell-own",true);
+                var ownScroll=(javafx.scene.control.ScrollPane)root.getCenter(); ownScroll.setVvalue(1); root.layout(); snapshot(root,size,"accounts-shell-own-action",true);
+                var save=root.lookup("#password-save"); var saveBounds=save.localToScene(save.getBoundsInLocal()); assertTrue(saveBounds.getMinY()>=0 && saveBounds.getMaxY()<=size[1]);
+                for (var role : new com.aceos.model.UserRole[]{com.aceos.model.UserRole.REQUESTER,com.aceos.model.UserRole.TECHNICIAN}) {
+                    var denied=new com.aceos.ui.WorkspaceView(new AssetPreview(role),() -> {},() -> {});
+                    assertThrows(IllegalArgumentException.class,() -> denied.navigate("accounts")); assertThrows(IllegalArgumentException.class,() -> denied.navigate("users"));
+                    assertNull(new AccountManagementView(new AssetPreview(role)).lookup("#accounts-create"));
+                }
+                assertNull(new AccountManagementView(new AceOsService()).lookup("#accounts-create")); return null; });
+        }
+        var ownWrites=new java.util.concurrent.atomic.AtomicInteger(); var ownGate=new CountDownLatch(1); var ownFailure=new java.util.concurrent.atomic.AtomicBoolean(true); var changed=new java.util.concurrent.atomic.AtomicInteger();
+        var service=new AccountsPreview() {
+            @Override public void changePassword(String current,String next) throws com.aceos.service.AceOsServiceException {
+                assertFalse(Platform.isFxApplicationThread()); ownWrites.incrementAndGet(); assertEquals("  Current fixture password  ",current); assertEquals("  New fixture passphrase  ",next);
+                try { ownGate.await(5,TimeUnit.SECONDS); } catch (InterruptedException e) { throw new RuntimeException(e); }
+                if (ownFailure.get()) throw new com.aceos.service.AceOsServiceException("Password rejected");
+            }
+        };
+        var own=new java.util.concurrent.atomic.AtomicReference<AccountView>();
+        fx(() -> { var root=new AccountView(service,false,changed::incrementAndGet,() -> {}); own.set(root); new Scene(root,800,520);
+            ((javafx.scene.control.TextField)root.lookup("#password-current")).setText("  Current fixture password  ");
+            ((javafx.scene.control.TextField)root.lookup("#password-next")).setText("  New fixture passphrase  ");
+            ((javafx.scene.control.TextField)root.lookup("#password-confirmation")).setText("  New fixture passphrase  ");
+            fire(root,"password-save"); fire(root,"password-save"); assertTrue(root.lookup("#password-current").isDisabled()); return null; });
+        ownGate.countDown(); awaitControl(own.get(),"password-save");
+        fx(() -> { assertEquals(1,ownWrites.get()); assertEquals("  New fixture passphrase  ",((javafx.scene.control.TextField)own.get().lookup("#password-next")).getText());
+            assertEquals(0,changed.get()); assertTrue(((javafx.scene.control.Label)own.get().lookup("#own-account-identity")).getText().contains("admin@aceos.local")); ownFailure.set(false); fire(own.get(),"password-save"); return null; });
+        awaitControl(own.get(),"password-save");
+        fx(() -> { assertEquals(2,ownWrites.get()); assertEquals(1,changed.get()); for (String id : new String[]{"current","next","confirmation"}) assertEquals("",((javafx.scene.control.TextField)own.get().lookup("#password-"+id)).getText()); return null; });
+    }
+
     private void snapshot(Region root, int[] size, String name) throws Exception {
         snapshot(root, size, name, false);
     }
