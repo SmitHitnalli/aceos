@@ -3,20 +3,22 @@ package com.aceos.repository;
 import com.aceos.database.DatabaseConnection;
 import com.aceos.model.Asset;
 import com.aceos.model.AssetStatus;
+import com.aceos.security.Scope;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Optional;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class AssetRepository {
 
     public Asset save(Asset asset) throws SQLException {
-        String sql = """
+        String sql =
+                """
                 INSERT INTO assets (
                     asset_code,
                     name,
@@ -27,11 +29,9 @@ public class AssetRepository {
                 VALUES (?, ?, ?, ?, ?)
                 """;
 
-        try (
-                Connection connection = DatabaseConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(
-                sql,
-                Statement.RETURN_GENERATED_KEYS
-        )) {
+        try (Connection connection = DatabaseConnection.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, asset.getAssetCode());
             statement.setString(2, asset.getName());
             statement.setString(3, asset.getCategory());
@@ -54,19 +54,17 @@ public class AssetRepository {
                             asset.getName(),
                             asset.getCategory(),
                             asset.getLocation(),
-                            asset.getStatus()
-                    );
+                            asset.getStatus());
                 }
             }
 
-            throw new SQLException(
-                    "MySQL did not return a generated asset ID"
-            );
+            throw new SQLException("MySQL did not return a generated asset ID");
         }
     }
 
     public Optional<Asset> findById(int assetId) throws SQLException {
-        String sql = """
+        String sql =
+                """
                 SELECT
                     asset_id,
                     asset_code,
@@ -77,23 +75,22 @@ public class AssetRepository {
                 FROM assets
                 WHERE asset_id = ?
                 """;
+        sql = Scope.filter(sql, "assets", "");
 
-        try (
-                Connection connection = DatabaseConnection.getConnection(); PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.getConnection();
+                PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, assetId);
 
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (resultSet.next()) {
-                    Asset asset = new Asset(
-                            resultSet.getInt("asset_id"),
-                            resultSet.getString("asset_code"),
-                            resultSet.getString("name"),
-                            resultSet.getString("category"),
-                            resultSet.getString("location"),
-                            AssetStatus.valueOf(
-                                    resultSet.getString("status")
-                            )
-                    );
+                    Asset asset =
+                            new Asset(
+                                    resultSet.getInt("asset_id"),
+                                    resultSet.getString("asset_code"),
+                                    resultSet.getString("name"),
+                                    resultSet.getString("category"),
+                                    resultSet.getString("location"),
+                                    AssetStatus.valueOf(resultSet.getString("status")));
 
                     return Optional.of(asset);
                 }
@@ -104,25 +101,25 @@ public class AssetRepository {
     }
 
     public List<Asset> findAll() throws SQLException {
-        String sql = """
-            SELECT
-                asset_id,
-                asset_code,
-                name,
-                category,
-                location,
-                status
-            FROM assets
-            ORDER BY asset_code, asset_id
-            """;
+        String sql =
+                """
+                SELECT
+                    asset_id,
+                    asset_code,
+                    name,
+                    category,
+                    location,
+                    status
+                FROM assets
+                ORDER BY asset_code, asset_id
+                """;
+        sql = Scope.filter(sql, "assets", "");
 
         List<Asset> assets = new ArrayList<>();
 
-        try (
-                Connection connection
-                = DatabaseConnection.getConnection(); PreparedStatement statement
-                = connection.prepareStatement(sql); ResultSet resultSet
-                = statement.executeQuery()) {
+        try (Connection connection = DatabaseConnection.getConnection();
+                PreparedStatement statement = connection.prepareStatement(sql);
+                ResultSet resultSet = statement.executeQuery()) {
             while (resultSet.next()) {
                 assets.add(
                         new Asset(
@@ -131,11 +128,7 @@ public class AssetRepository {
                                 resultSet.getString("name"),
                                 resultSet.getString("category"),
                                 resultSet.getString("location"),
-                                AssetStatus.valueOf(
-                                        resultSet.getString("status")
-                                )
-                        )
-                );
+                                AssetStatus.valueOf(resultSet.getString("status"))));
             }
         }
 

@@ -12,6 +12,7 @@ public class PreventiveMaintenanceServiceTest {
 
     public static void main(String[] args)
             throws AceOsServiceException {
+        com.aceos.security.LegacyVerificationGuard.retired();
 
         AceOsService service = new AceOsService();
 

@@ -19,6 +19,7 @@ import java.sql.SQLException;
 public class WorkOrderRepositoryTest {
 
     public static void main(String[] args) throws SQLException {
+        com.aceos.security.LegacyVerificationGuard.retired();
         AssetRepository assetRepository =
                 new AssetRepository();
         UserRepository userRepository =

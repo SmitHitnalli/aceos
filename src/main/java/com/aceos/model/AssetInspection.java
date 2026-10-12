@@ -13,22 +13,19 @@ public class AssetInspection {
     private User inspectedBy;
     private String notes;
     private LocalDate completedDate;
+    private int assignedTechnicianId;
 
-    public AssetInspection(
-            Asset asset,
-            String inspectionType,
-            LocalDate scheduledDate) {
+    public int getAssignedTechnicianId() {
+        return assignedTechnicianId;
+    }
 
-        this(
-                0,
-                asset,
-                inspectionType,
-                scheduledDate,
-                InspectionStatus.SCHEDULED,
-                null,
-                null,
-                null
-        );
+    public void setAssignedTechnicianId(int id) {
+        assignedTechnicianId = id;
+    }
+
+    public AssetInspection(Asset asset, String inspectionType, LocalDate scheduledDate) {
+
+        this(0, asset, inspectionType, scheduledDate, InspectionStatus.SCHEDULED, null, null, null);
     }
 
     public AssetInspection(
@@ -42,42 +39,26 @@ public class AssetInspection {
             LocalDate completedDate) {
 
         if (inspectionId < 0) {
-            throw new IllegalArgumentException(
-                    "Inspection ID cannot be negative"
-            );
+            throw new IllegalArgumentException("Inspection ID cannot be negative");
         }
 
         if (asset == null) {
-            throw new IllegalArgumentException(
-                    "Inspection asset is required"
-            );
+            throw new IllegalArgumentException("Inspection asset is required");
         }
 
-        if (inspectionType == null
-                || inspectionType.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Inspection type is required"
-            );
+        if (inspectionType == null || inspectionType.isBlank()) {
+            throw new IllegalArgumentException("Inspection type is required");
         }
 
         if (scheduledDate == null) {
-            throw new IllegalArgumentException(
-                    "Scheduled date is required"
-            );
+            throw new IllegalArgumentException("Scheduled date is required");
         }
 
         if (status == null) {
-            throw new IllegalArgumentException(
-                    "Inspection status is required"
-            );
+            throw new IllegalArgumentException("Inspection status is required");
         }
 
-        validateState(
-                status,
-                inspectedBy,
-                notes,
-                completedDate
-        );
+        validateState(status, inspectedBy, notes, completedDate);
 
         this.inspectionId = inspectionId;
         this.asset = asset;
@@ -95,19 +76,13 @@ public class AssetInspection {
             String completionNotes,
             LocalDate completionDate) {
 
+        if (inspector == null || inspector.getRole() != UserRole.TECHNICIAN)
+            throw new IllegalArgumentException("Only a technician can complete an inspection");
         if (status != InspectionStatus.SCHEDULED) {
-            throw new IllegalStateException(
-                    "Only a scheduled inspection "
-                            + "can be completed"
-            );
+            throw new IllegalStateException("Only a scheduled inspection " + "can be completed");
         }
 
-        validateState(
-                result,
-                inspector,
-                completionNotes,
-                completionDate
-        );
+        validateState(result, inspector, completionNotes, completionDate);
 
         status = result;
         inspectedBy = inspector;
@@ -117,13 +92,10 @@ public class AssetInspection {
 
     public boolean isOverdueOn(LocalDate date) {
         if (date == null) {
-            throw new IllegalArgumentException(
-                    "Comparison date is required"
-            );
+            throw new IllegalArgumentException("Comparison date is required");
         }
 
-        return status == InspectionStatus.SCHEDULED
-                && scheduledDate.isBefore(date);
+        return status == InspectionStatus.SCHEDULED && scheduledDate.isBefore(date);
     }
 
     public boolean isCompliant() {
@@ -131,55 +103,31 @@ public class AssetInspection {
     }
 
     private static void validateState(
-            InspectionStatus status,
-            User inspectedBy,
-            String notes,
-            LocalDate completedDate) {
+            InspectionStatus status, User inspectedBy, String notes, LocalDate completedDate) {
 
         if (status == InspectionStatus.SCHEDULED) {
-            if (inspectedBy != null
-                    || completedDate != null) {
+            if (inspectedBy != null || completedDate != null) {
                 throw new IllegalArgumentException(
-                        "A scheduled inspection cannot "
-                                + "have completion details"
-                );
+                        "A scheduled inspection cannot " + "have completion details");
             }
 
             return;
         }
 
-        if (status != InspectionStatus.PASSED
-                && status != InspectionStatus.FAILED) {
-            throw new IllegalArgumentException(
-                    "Inspection result must be "
-                            + "PASSED or FAILED"
-            );
+        if (status != InspectionStatus.PASSED && status != InspectionStatus.FAILED) {
+            throw new IllegalArgumentException("Inspection result must be " + "PASSED or FAILED");
         }
 
         if (inspectedBy == null) {
-            throw new IllegalArgumentException(
-                    "Inspector is required"
-            );
-        }
-
-        if (inspectedBy.getRole()
-                != UserRole.TECHNICIAN) {
-            throw new IllegalArgumentException(
-                    "Only a technician can "
-                            + "complete an inspection"
-            );
+            throw new IllegalArgumentException("Inspector is required");
         }
 
         if (notes == null || notes.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Inspection notes are required"
-            );
+            throw new IllegalArgumentException("Inspection notes are required");
         }
 
         if (completedDate == null) {
-            throw new IllegalArgumentException(
-                    "Completion date is required"
-            );
+            throw new IllegalArgumentException("Completion date is required");
         }
     }
 

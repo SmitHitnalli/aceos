@@ -1,9 +1,7 @@
 package com.aceos.ui.view;
 
-import com.aceos.model.User;
 import com.aceos.model.UserRole;
 import com.aceos.service.AceOsService;
-import com.aceos.service.AceOsServiceException;
 
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
@@ -23,19 +21,10 @@ public class UserManagementView extends VBox {
 
         Label title = new Label("User Management");
         title.setStyle(
-                "-fx-font-size: 28px;"
-                        + "-fx-font-weight: bold;"
-                        + "-fx-text-fill: #1e293b;"
-        );
+                "-fx-font-size: 28px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #1e293b;");
 
-        Label description = new Label(
-                "Register requesters, technicians, "
-                        + "and administrators."
-        );
-        description.setStyle(
-                "-fx-font-size: 15px;"
-                        + "-fx-text-fill: #475569;"
-        );
+        Label description = new Label("Register requesters, technicians, " + "and administrators.");
+        description.setStyle("-fx-font-size: 15px;" + "-fx-text-fill: #475569;");
 
         TextField nameField = new TextField();
         nameField.setPromptText("Enter the user's name");
@@ -61,44 +50,27 @@ public class UserManagementView extends VBox {
         form.add(new Label("Role"), 0, 2);
         form.add(roleBox, 1, 2);
 
-        GridPane.setHgrow(
-                nameField,
-                Priority.ALWAYS
-        );
-        GridPane.setHgrow(
-                emailField,
-                Priority.ALWAYS
-        );
-        GridPane.setHgrow(
-                roleBox,
-                Priority.ALWAYS
-        );
+        GridPane.setHgrow(nameField, Priority.ALWAYS);
+        GridPane.setHgrow(emailField, Priority.ALWAYS);
+        GridPane.setHgrow(roleBox, Priority.ALWAYS);
 
-        Button registerButton =
-                new Button("Register User");
+        Button registerButton = new Button("Register User");
         registerButton.setMinHeight(40);
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
 
-        registerButton.setOnAction(event ->
-                registerUser(
-                        service,
-                        nameField,
-                        emailField,
-                        roleBox,
-                        registerButton,
-                        statusLabel
-                )
-        );
+        registerButton.setOnAction(
+                event ->
+                        registerUser(
+                                service,
+                                nameField,
+                                emailField,
+                                roleBox,
+                                registerButton,
+                                statusLabel));
 
-        getChildren().addAll(
-                title,
-                description,
-                form,
-                registerButton,
-                statusLabel
-        );
+        getChildren().addAll(title, description, form, registerButton, statusLabel);
     }
 
     private void registerUser(
@@ -110,36 +82,30 @@ public class UserManagementView extends VBox {
             Label statusLabel) {
         registerButton.setDisable(true);
 
-        try {
-            User registeredUser = service.registerUser(
-                    nameField.getText(),
-                    emailField.getText(),
-                    roleBox.getValue()
-            );
+        var input1 = nameField.getText();
+        var input2 = emailField.getText();
+        var input3 = roleBox.getValue();
+        com.aceos.ui.FxTasks.run(
+                () -> service.registerUser(input1, input2, input3),
+                registeredUser -> {
+                    statusLabel.setStyle("-fx-text-fill: #15803d;");
+                    statusLabel.setText(
+                            "Registered user #"
+                                    + registeredUser.getUserId()
+                                    + ": "
+                                    + registeredUser.getName());
 
-            statusLabel.setStyle(
-                    "-fx-text-fill: #15803d;"
-            );
-            statusLabel.setText(
-                    "Registered user #"
-                            + registeredUser.getUserId()
-                            + ": "
-                            + registeredUser.getName()
-            );
-
-            nameField.clear();
-            emailField.clear();
-            roleBox.getSelectionModel().clearSelection();
-            nameField.requestFocus();
-        } catch (AceOsServiceException exception) {
-            statusLabel.setStyle(
-                    "-fx-text-fill: #b91c1c;"
-            );
-            statusLabel.setText(
-                    exception.getMessage()
-            );
-        } finally {
-            registerButton.setDisable(false);
-        }
+                    nameField.clear();
+                    emailField.clear();
+                    roleBox.getSelectionModel().clearSelection();
+                    nameField.requestFocus();
+                },
+                exception -> {
+                    statusLabel.setStyle("-fx-text-fill: #b91c1c;");
+                    statusLabel.setText(exception.getMessage());
+                },
+                () -> {
+                    registerButton.setDisable(false);
+                });
     }
 }

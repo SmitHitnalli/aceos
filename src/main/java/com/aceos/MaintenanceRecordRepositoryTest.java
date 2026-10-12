@@ -22,6 +22,7 @@ import java.sql.SQLException;
 public class MaintenanceRecordRepositoryTest {
 
     public static void main(String[] args) throws SQLException {
+        com.aceos.security.LegacyVerificationGuard.retired();
         AssetRepository assetRepository =
                 new AssetRepository();
         UserRepository userRepository =

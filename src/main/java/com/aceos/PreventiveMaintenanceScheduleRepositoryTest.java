@@ -13,6 +13,7 @@ import java.time.LocalDate;
 public class PreventiveMaintenanceScheduleRepositoryTest {
 
     public static void main(String[] args) throws SQLException {
+        com.aceos.security.LegacyVerificationGuard.retired();
         AssetRepository assetRepository =
                 new AssetRepository();
 

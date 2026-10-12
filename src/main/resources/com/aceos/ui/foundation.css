@@ -1,0 +1,13 @@
+.root { -fx-font-family: "Segoe UI"; -fx-font-size: 14px; -fx-background-color: #f4f7fb; }
+.label { -fx-text-fill: #172b45; }
+.button { -fx-background-radius: 8; -fx-padding: 10 16; -fx-background-color: #ffffff; -fx-border-color: #d5dfeb; -fx-border-radius: 8; -fx-min-height: 40; }
+.button:hover { -fx-background-color: #eaf0fa; }
+.button:focused, .text-input:focused, .combo-box:focused { -fx-border-color: #1d4ed8; -fx-border-width: 2; }
+.primary { -fx-background-color: #1d4ed8; -fx-text-fill: white; -fx-border-color: #1d4ed8; }
+.primary:hover { -fx-background-color: #1e40af; }
+.text-input, .combo-box { -fx-background-color: white; -fx-background-radius: 8; -fx-border-color: #d5dfeb; -fx-border-radius: 8; -fx-padding: 8; }
+.title { -fx-font-size: 26px; -fx-font-weight: bold; }
+.muted { -fx-text-fill: #52647a; }
+.error { -fx-text-fill: #b91c1c; }
+.success { -fx-text-fill: #166534; }
+.login-card { -fx-background-color: white; -fx-background-radius: 12; -fx-padding: 32; -fx-border-color: #d5dfeb; -fx-border-radius: 12; }

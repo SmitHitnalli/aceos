@@ -9,6 +9,7 @@ import java.sql.SQLException;
 public class AssetRepositoryTest {
 
     public static void main(String[] args) throws SQLException {
+        com.aceos.security.LegacyVerificationGuard.retired();
         AssetRepository repository = new AssetRepository();
 
         String uniqueAssetCode =

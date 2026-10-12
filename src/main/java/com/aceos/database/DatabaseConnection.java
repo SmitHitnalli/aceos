@@ -10,10 +10,14 @@ public final class DatabaseConnection {
     private static final String USER_VARIABLE = "ACEOS_DB_USER";
     private static final String PASSWORD_VARIABLE = "ACEOS_DB_PASSWORD";
 
-    private DatabaseConnection() {
-    }
+    private DatabaseConnection() {}
 
     public static Connection getConnection() throws SQLException {
+        Connection current = Transactions.current();
+        return current == null ? openConnection() : current;
+    }
+
+    static Connection openConnection() throws SQLException {
         String url = requireEnvironmentVariable(URL_VARIABLE);
         String user = requireEnvironmentVariable(USER_VARIABLE);
         String password = requireEnvironmentVariable(PASSWORD_VARIABLE);
@@ -26,8 +30,7 @@ public final class DatabaseConnection {
 
         if (value == null || value.isBlank()) {
             throw new IllegalStateException(
-                    "Missing required environment variable: " + variableName
-            );
+                    "Missing required environment variable: " + variableName);
         }
 
         return value;

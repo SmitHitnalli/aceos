@@ -3,7 +3,6 @@ package com.aceos.ui.view;
 import com.aceos.model.MaintenanceScheduleStatus;
 import com.aceos.model.PreventiveMaintenanceSchedule;
 import com.aceos.service.AceOsService;
-import com.aceos.service.AceOsServiceException;
 
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
@@ -24,161 +23,88 @@ import javafx.scene.layout.VBox;
 import java.time.LocalDate;
 import java.util.Locale;
 
-public class PreventiveMaintenanceDirectoryView
-        extends VBox {
+public class PreventiveMaintenanceDirectoryView extends VBox {
 
-    public PreventiveMaintenanceDirectoryView(
-            AceOsService service) {
+    public PreventiveMaintenanceDirectoryView(AceOsService service) {
 
         setSpacing(18);
         setPadding(new Insets(40));
 
-        Label title = new Label(
-                "Preventive Maintenance Directory"
-        );
+        Label title = new Label("Preventive Maintenance Directory");
         title.setStyle(
-                "-fx-font-size: 28px;"
-                        + "-fx-font-weight: bold;"
-                        + "-fx-text-fill: #1e293b;"
-        );
+                "-fx-font-size: 28px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #1e293b;");
 
-        Label description = new Label(
-                "View recurring maintenance schedules, "
-                        + "due dates, and current statuses."
-        );
+        Label description =
+                new Label(
+                        "View recurring maintenance schedules, "
+                                + "due dates, and current statuses.");
         description.setWrapText(true);
-        description.setStyle(
-                "-fx-font-size: 15px;"
-                        + "-fx-text-fill: #475569;"
-        );
+        description.setStyle("-fx-font-size: 15px;" + "-fx-text-fill: #475569;");
 
         TextField searchField = new TextField();
-        searchField.setPromptText(
-                "Search ID, asset, task, due date, or timing"
-        );
+        searchField.setPromptText("Search ID, asset, task, due date, or timing");
 
-        ComboBox<String> statusFilter =
-                new ComboBox<>();
+        ComboBox<String> statusFilter = new ComboBox<>();
         statusFilter.getItems().add("ALL");
-        for (MaintenanceScheduleStatus status
-                : MaintenanceScheduleStatus.values()) {
+        for (MaintenanceScheduleStatus status : MaintenanceScheduleStatus.values()) {
             statusFilter.getItems().add(status.name());
         }
         statusFilter.setValue("ALL");
 
-        HBox filters = new HBox(
-                10,
-                new Label("Search"),
-                searchField,
-                new Label("Status"),
-                statusFilter
-        );
+        HBox filters =
+                new HBox(10, new Label("Search"), searchField, new Label("Status"), statusFilter);
         HBox.setHgrow(searchField, Priority.ALWAYS);
 
-        ObservableList<PreventiveMaintenanceSchedule>
-                sourceItems =
+        ObservableList<PreventiveMaintenanceSchedule> sourceItems =
                 FXCollections.observableArrayList();
-        FilteredList<PreventiveMaintenanceSchedule>
-                filteredItems =
-                new FilteredList<>(
-                        sourceItems,
-                        schedule -> true
-                );
+        FilteredList<PreventiveMaintenanceSchedule> filteredItems =
+                new FilteredList<>(sourceItems, schedule -> true);
 
-        TableView<PreventiveMaintenanceSchedule> table =
-                new TableView<>();
+        TableView<PreventiveMaintenanceSchedule> table = new TableView<>();
         table.setItems(filteredItems);
 
-        table.setPlaceholder(
-                new Label(
-                        "No preventive maintenance "
-                                + "schedules found"
-                )
-        );
+        table.setPlaceholder(new Label("No preventive maintenance " + "schedules found"));
 
-        table.setColumnResizePolicy(
-                TableView
-                        .CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN
-        );
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
-        TableColumn<PreventiveMaintenanceSchedule, Number>
-                idColumn =
-                new TableColumn<>("ID");
+        TableColumn<PreventiveMaintenanceSchedule, Number> idColumn = new TableColumn<>("ID");
 
-        idColumn.setCellValueFactory(data ->
-                new ReadOnlyIntegerWrapper(
-                        data.getValue()
-                                .getMaintenanceScheduleId()
-                )
-        );
+        idColumn.setCellValueFactory(
+                data -> new ReadOnlyIntegerWrapper(data.getValue().getMaintenanceScheduleId()));
 
-        TableColumn<PreventiveMaintenanceSchedule, String>
-                assetColumn =
-                new TableColumn<>("Asset");
+        TableColumn<PreventiveMaintenanceSchedule, String> assetColumn = new TableColumn<>("Asset");
 
-        assetColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue()
-                                .getAsset()
-                                .getAssetCode()
-                )
-        );
+        assetColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(data.getValue().getAsset().getAssetCode()));
 
-        TableColumn<PreventiveMaintenanceSchedule, String>
-                taskColumn =
-                new TableColumn<>("Task");
+        TableColumn<PreventiveMaintenanceSchedule, String> taskColumn = new TableColumn<>("Task");
 
-        taskColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue()
-                                .getTaskDescription()
-                )
-        );
+        taskColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(data.getValue().getTaskDescription()));
 
-        TableColumn<PreventiveMaintenanceSchedule, Number>
-                frequencyColumn =
+        TableColumn<PreventiveMaintenanceSchedule, Number> frequencyColumn =
                 new TableColumn<>("Every (Days)");
 
-        frequencyColumn.setCellValueFactory(data ->
-                new ReadOnlyIntegerWrapper(
-                        data.getValue()
-                                .getFrequencyDays()
-                )
-        );
+        frequencyColumn.setCellValueFactory(
+                data -> new ReadOnlyIntegerWrapper(data.getValue().getFrequencyDays()));
 
-        TableColumn<PreventiveMaintenanceSchedule, String>
-                dueDateColumn =
+        TableColumn<PreventiveMaintenanceSchedule, String> dueDateColumn =
                 new TableColumn<>("Next Due");
 
-        dueDateColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue()
-                                .getNextDueDate()
-                                .toString()
-                )
-        );
+        dueDateColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(data.getValue().getNextDueDate().toString()));
 
-        TableColumn<PreventiveMaintenanceSchedule, String>
-                statusColumn =
+        TableColumn<PreventiveMaintenanceSchedule, String> statusColumn =
                 new TableColumn<>("Status");
 
-        statusColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue()
-                                .getStatus()
-                                .name()
-                )
-        );
+        statusColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(data.getValue().getStatus().name()));
 
-        TableColumn<PreventiveMaintenanceSchedule, String>
-                timingColumn =
+        TableColumn<PreventiveMaintenanceSchedule, String> timingColumn =
                 new TableColumn<>("Timing");
 
-        timingColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        getTiming(data.getValue())
-                )
-        );
+        timingColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(getTiming(data.getValue())));
 
         table.getColumns().add(idColumn);
         table.getColumns().add(assetColumn);
@@ -189,124 +115,96 @@ public class PreventiveMaintenanceDirectoryView
         table.getColumns().add(timingColumn);
         table.setPrefHeight(420);
 
-        Button refreshButton =
-                new Button("Refresh Schedules");
+        Button refreshButton = new Button("Refresh Schedules");
         refreshButton.setMinHeight(40);
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
 
-        Runnable applyFilters = () -> {
-            String query = searchField.getText() == null
-                    ? ""
-                    : searchField.getText().trim()
-                            .toLowerCase(Locale.ROOT);
-            String selectedStatus = statusFilter.getValue();
+        Runnable applyFilters =
+                () -> {
+                    String query =
+                            searchField.getText() == null
+                                    ? ""
+                                    : searchField.getText().trim().toLowerCase(Locale.ROOT);
+                    String selectedStatus = statusFilter.getValue();
 
-            filteredItems.setPredicate(schedule -> {
-                boolean matchesSearch = query.isEmpty()
-                        || String.valueOf(
-                                schedule
-                                        .getMaintenanceScheduleId()
-                        ).contains(query)
-                        || schedule.getAsset().getAssetCode()
-                                .toLowerCase(Locale.ROOT)
-                                .contains(query)
-                        || schedule.getTaskDescription()
-                                .toLowerCase(Locale.ROOT)
-                                .contains(query)
-                        || String.valueOf(
-                                schedule.getFrequencyDays()
-                        ).contains(query)
-                        || schedule.getNextDueDate().toString()
-                                .contains(query)
-                        || getTiming(schedule)
-                                .toLowerCase(Locale.ROOT)
-                                .contains(query);
+                    filteredItems.setPredicate(
+                            schedule -> {
+                                boolean matchesSearch =
+                                        query.isEmpty()
+                                                || String.valueOf(
+                                                                schedule.getMaintenanceScheduleId())
+                                                        .contains(query)
+                                                || schedule.getAsset()
+                                                        .getAssetCode()
+                                                        .toLowerCase(Locale.ROOT)
+                                                        .contains(query)
+                                                || schedule.getTaskDescription()
+                                                        .toLowerCase(Locale.ROOT)
+                                                        .contains(query)
+                                                || String.valueOf(schedule.getFrequencyDays())
+                                                        .contains(query)
+                                                || schedule.getNextDueDate()
+                                                        .toString()
+                                                        .contains(query)
+                                                || getTiming(schedule)
+                                                        .toLowerCase(Locale.ROOT)
+                                                        .contains(query);
 
-                boolean matchesStatus =
-                        "ALL".equals(selectedStatus)
-                        || schedule.getStatus().name()
-                                .equals(selectedStatus);
+                                boolean matchesStatus =
+                                        "ALL".equals(selectedStatus)
+                                                || schedule.getStatus()
+                                                        .name()
+                                                        .equals(selectedStatus);
 
-                return matchesSearch && matchesStatus;
-            });
-        };
+                                return matchesSearch && matchesStatus;
+                            });
+                };
 
-        searchField.textProperty().addListener(
-                (observable, oldValue, newValue) ->
-                        applyFilters.run()
-        );
-        statusFilter.valueProperty().addListener(
-                (observable, oldValue, newValue) ->
-                        applyFilters.run()
-        );
+        searchField
+                .textProperty()
+                .addListener((observable, oldValue, newValue) -> applyFilters.run());
+        statusFilter
+                .valueProperty()
+                .addListener((observable, oldValue, newValue) -> applyFilters.run());
 
-        refreshButton.setOnAction(event ->
-                loadSchedules(
-                        service,
-                        sourceItems,
-                        refreshButton,
-                        statusLabel
-                )
-        );
+        refreshButton.setOnAction(
+                event -> loadSchedules(service, sourceItems, refreshButton, statusLabel));
 
-        getChildren().addAll(
-                title,
-                description,
-                filters,
-                table,
-                refreshButton,
-                statusLabel
-        );
+        getChildren().addAll(title, description, filters, table, refreshButton, statusLabel);
 
-        loadSchedules(
-                service,
-                sourceItems,
-                refreshButton,
-                statusLabel
-        );
+        loadSchedules(service, sourceItems, refreshButton, statusLabel);
     }
 
     private void loadSchedules(
             AceOsService service,
-            ObservableList<PreventiveMaintenanceSchedule>
-                    sourceItems,
+            ObservableList<PreventiveMaintenanceSchedule> sourceItems,
             Button refreshButton,
             Label statusLabel) {
 
         refreshButton.setDisable(true);
 
-        try {
-            sourceItems.setAll(
-                    service
-                            .getAllPreventiveMaintenanceSchedules()
-            );
+        com.aceos.ui.FxTasks.run(
+                () -> service.getAllPreventiveMaintenanceSchedules(),
+                loaded -> {
+                    sourceItems.setAll(loaded);
 
-            statusLabel.setStyle(
-                    "-fx-text-fill: #15803d;"
-            );
-            statusLabel.setText(
-                    sourceItems.size()
-                            + " maintenance schedules loaded"
-            );
-        } catch (AceOsServiceException exception) {
-            statusLabel.setStyle(
-                    "-fx-text-fill: #b91c1c;"
-            );
-            statusLabel.setText(
-                    exception.getMessage()
-            );
-        } finally {
-            refreshButton.setDisable(false);
-        }
+                    statusLabel.setStyle("-fx-text-fill: #15803d;");
+                    statusLabel.setText(sourceItems.size() + " maintenance schedules loaded");
+                },
+                exception -> {
+                    statusLabel.setStyle("-fx-text-fill: #b91c1c;");
+                    statusLabel.setText(exception.getMessage());
+                },
+                () -> {
+                    refreshButton.setDisable(false);
+                });
     }
 
-    private String getTiming(
-            PreventiveMaintenanceSchedule schedule) {
+    private String getTiming(PreventiveMaintenanceSchedule schedule) {
 
-        if (schedule.getStatus()
-                == MaintenanceScheduleStatus.PAUSED) {
+        if (schedule.getStatus() == MaintenanceScheduleStatus.PAUSED) {
             return "PAUSED";
         }
 

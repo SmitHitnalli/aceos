@@ -3,7 +3,6 @@ package com.aceos.ui.view;
 import com.aceos.model.AssetInspection;
 import com.aceos.model.InspectionStatus;
 import com.aceos.service.AceOsService;
-import com.aceos.service.AceOsServiceException;
 
 import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
@@ -26,146 +25,83 @@ import java.util.Locale;
 
 public class AssetInspectionDirectoryView extends VBox {
 
-    public AssetInspectionDirectoryView(
-            AceOsService service) {
+    public AssetInspectionDirectoryView(AceOsService service) {
         setSpacing(18);
         setPadding(new Insets(40));
 
         Label title = new Label("Inspection Directory");
         title.setStyle(
-                "-fx-font-size: 28px;"
-                        + "-fx-font-weight: bold;"
-                        + "-fx-text-fill: #1e293b;"
-        );
+                "-fx-font-size: 28px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #1e293b;");
 
-        Label description = new Label(
-                "View scheduled, overdue, compliant, and "
-                        + "non-compliant asset inspections."
-        );
+        Label description =
+                new Label(
+                        "View scheduled, overdue, compliant, and "
+                                + "non-compliant asset inspections.");
         description.setWrapText(true);
-        description.setStyle(
-                "-fx-font-size: 15px;"
-                        + "-fx-text-fill: #475569;"
-        );
+        description.setStyle("-fx-font-size: 15px;" + "-fx-text-fill: #475569;");
 
         TextField searchField = new TextField();
-        searchField.setPromptText(
-                "Search ID, asset, type, inspector, or compliance"
-        );
+        searchField.setPromptText("Search ID, asset, type, inspector, or compliance");
 
-        ComboBox<String> statusFilter =
-                new ComboBox<>();
+        ComboBox<String> statusFilter = new ComboBox<>();
         statusFilter.getItems().add("ALL");
-        for (InspectionStatus status
-                : InspectionStatus.values()) {
+        for (InspectionStatus status : InspectionStatus.values()) {
             statusFilter.getItems().add(status.name());
         }
         statusFilter.setValue("ALL");
 
-        HBox filters = new HBox(
-                10,
-                new Label("Search"),
-                searchField,
-                new Label("Status"),
-                statusFilter
-        );
+        HBox filters =
+                new HBox(10, new Label("Search"), searchField, new Label("Status"), statusFilter);
         HBox.setHgrow(searchField, Priority.ALWAYS);
 
-        ObservableList<AssetInspection> sourceItems =
-                FXCollections.observableArrayList();
+        ObservableList<AssetInspection> sourceItems = FXCollections.observableArrayList();
         FilteredList<AssetInspection> filteredItems =
-                new FilteredList<>(
-                        sourceItems,
-                        inspection -> true
-                );
+                new FilteredList<>(sourceItems, inspection -> true);
 
-        TableView<AssetInspection> table =
-                new TableView<>();
+        TableView<AssetInspection> table = new TableView<>();
         table.setItems(filteredItems);
-        table.setPlaceholder(
-                new Label("No inspections found")
-        );
-        table.setColumnResizePolicy(
-                TableView
-                        .CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN
-        );
+        table.setPlaceholder(new Label("No inspections found"));
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
-        TableColumn<AssetInspection, Number> idColumn =
-                new TableColumn<>("ID");
-        idColumn.setCellValueFactory(data ->
-                new ReadOnlyIntegerWrapper(
-                        data.getValue().getInspectionId()
-                )
-        );
+        TableColumn<AssetInspection, Number> idColumn = new TableColumn<>("ID");
+        idColumn.setCellValueFactory(
+                data -> new ReadOnlyIntegerWrapper(data.getValue().getInspectionId()));
 
-        TableColumn<AssetInspection, String> assetColumn =
-                new TableColumn<>("Asset");
-        assetColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue()
-                                .getAsset()
-                                .getAssetCode()
-                )
-        );
+        TableColumn<AssetInspection, String> assetColumn = new TableColumn<>("Asset");
+        assetColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(data.getValue().getAsset().getAssetCode()));
 
-        TableColumn<AssetInspection, String> typeColumn =
-                new TableColumn<>("Type");
-        typeColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue().getInspectionType()
-                )
-        );
+        TableColumn<AssetInspection, String> typeColumn = new TableColumn<>("Type");
+        typeColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(data.getValue().getInspectionType()));
 
-        TableColumn<AssetInspection, String>
-                scheduledColumn =
-                new TableColumn<>("Scheduled");
-        scheduledColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue()
-                                .getScheduledDate()
-                                .toString()
-                )
-        );
+        TableColumn<AssetInspection, String> scheduledColumn = new TableColumn<>("Scheduled");
+        scheduledColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(data.getValue().getScheduledDate().toString()));
 
-        TableColumn<AssetInspection, String> statusColumn =
-                new TableColumn<>("Status");
-        statusColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue().getStatus().name()
-                )
-        );
+        TableColumn<AssetInspection, String> statusColumn = new TableColumn<>("Status");
+        statusColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(data.getValue().getStatus().name()));
 
-        TableColumn<AssetInspection, String>
-                complianceColumn =
-                new TableColumn<>("Compliance");
-        complianceColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        getComplianceState(data.getValue())
-                )
-        );
+        TableColumn<AssetInspection, String> complianceColumn = new TableColumn<>("Compliance");
+        complianceColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(getComplianceState(data.getValue())));
 
-        TableColumn<AssetInspection, String>
-                inspectorColumn =
-                new TableColumn<>("Inspector");
-        inspectorColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue().getInspectedBy() == null
-                        ? "-"
-                        : data.getValue()
-                                .getInspectedBy()
-                                .getName()
-                )
-        );
+        TableColumn<AssetInspection, String> inspectorColumn = new TableColumn<>("Inspector");
+        inspectorColumn.setCellValueFactory(
+                data ->
+                        new ReadOnlyStringWrapper(
+                                data.getValue().getInspectedBy() == null
+                                        ? "-"
+                                        : data.getValue().getInspectedBy().getName()));
 
-        TableColumn<AssetInspection, String> notesColumn =
-                new TableColumn<>("Notes");
-        notesColumn.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(
-                        data.getValue().getNotes() == null
-                        ? "-"
-                        : data.getValue().getNotes()
-                )
-        );
+        TableColumn<AssetInspection, String> notesColumn = new TableColumn<>("Notes");
+        notesColumn.setCellValueFactory(
+                data ->
+                        new ReadOnlyStringWrapper(
+                                data.getValue().getNotes() == null
+                                        ? "-"
+                                        : data.getValue().getNotes()));
 
         table.getColumns().add(idColumn);
         table.getColumns().add(assetColumn);
@@ -177,92 +113,87 @@ public class AssetInspectionDirectoryView extends VBox {
         table.getColumns().add(notesColumn);
         table.setPrefHeight(420);
 
-        Button refreshButton =
-                new Button("Refresh Inspections");
+        Button refreshButton = new Button("Refresh Inspections");
         refreshButton.setMinHeight(40);
 
         Label statusLabel = new Label();
         statusLabel.setWrapText(true);
 
-        Runnable applyFilters = () -> {
-            String query = searchField.getText() == null
-                    ? ""
-                    : searchField.getText().trim()
-                            .toLowerCase(Locale.ROOT);
-            String selectedStatus = statusFilter.getValue();
+        Runnable applyFilters =
+                () -> {
+                    String query =
+                            searchField.getText() == null
+                                    ? ""
+                                    : searchField.getText().trim().toLowerCase(Locale.ROOT);
+                    String selectedStatus = statusFilter.getValue();
 
-            filteredItems.setPredicate(inspection -> {
-                String inspectorName =
-                        inspection.getInspectedBy() == null
-                        ? ""
-                        : inspection.getInspectedBy().getName();
-                String notes = inspection.getNotes() == null
-                        ? ""
-                        : inspection.getNotes();
+                    filteredItems.setPredicate(
+                            inspection -> {
+                                String inspectorName =
+                                        inspection.getInspectedBy() == null
+                                                ? ""
+                                                : inspection.getInspectedBy().getName();
+                                String notes =
+                                        inspection.getNotes() == null ? "" : inspection.getNotes();
 
-                boolean matchesSearch = query.isEmpty()
-                        || String.valueOf(
-                                inspection.getInspectionId()
-                        ).contains(query)
-                        || inspection.getAsset().getAssetCode()
-                                .toLowerCase(Locale.ROOT)
-                                .contains(query)
-                        || inspection.getInspectionType()
-                                .toLowerCase(Locale.ROOT)
-                                .contains(query)
-                        || inspection.getScheduledDate().toString()
-                                .contains(query)
-                        || inspectorName
-                                .toLowerCase(Locale.ROOT)
-                                .contains(query)
-                        || notes.toLowerCase(Locale.ROOT)
-                                .contains(query)
-                        || getComplianceState(inspection)
-                                .toLowerCase(Locale.ROOT)
-                                .contains(query);
+                                boolean matchesSearch =
+                                        query.isEmpty()
+                                                || String.valueOf(inspection.getInspectionId())
+                                                        .contains(query)
+                                                || inspection
+                                                        .getAsset()
+                                                        .getAssetCode()
+                                                        .toLowerCase(Locale.ROOT)
+                                                        .contains(query)
+                                                || inspection
+                                                        .getInspectionType()
+                                                        .toLowerCase(Locale.ROOT)
+                                                        .contains(query)
+                                                || inspection
+                                                        .getScheduledDate()
+                                                        .toString()
+                                                        .contains(query)
+                                                || inspectorName
+                                                        .toLowerCase(Locale.ROOT)
+                                                        .contains(query)
+                                                || notes.toLowerCase(Locale.ROOT).contains(query)
+                                                || getComplianceState(inspection)
+                                                        .toLowerCase(Locale.ROOT)
+                                                        .contains(query);
 
-                boolean matchesStatus =
-                        "ALL".equals(selectedStatus)
-                        || inspection.getStatus().name()
-                                .equals(selectedStatus);
+                                boolean matchesStatus =
+                                        "ALL".equals(selectedStatus)
+                                                || inspection
+                                                        .getStatus()
+                                                        .name()
+                                                        .equals(selectedStatus);
 
-                return matchesSearch && matchesStatus;
-            });
-        };
+                                return matchesSearch && matchesStatus;
+                            });
+                };
 
-        searchField.textProperty().addListener(
-                (observable, oldValue, newValue) ->
-                        applyFilters.run()
-        );
-        statusFilter.valueProperty().addListener(
-                (observable, oldValue, newValue) ->
-                        applyFilters.run()
-        );
+        searchField
+                .textProperty()
+                .addListener((observable, oldValue, newValue) -> applyFilters.run());
+        statusFilter
+                .valueProperty()
+                .addListener((observable, oldValue, newValue) -> applyFilters.run());
 
-        refreshButton.setOnAction(event ->
-                loadInspections(
-                        service,
-                        sourceItems,
-                        refreshButton,
-                        statusLabel
-                )
-        );
+        refreshButton.setOnAction(
+                event -> loadInspections(service, sourceItems, refreshButton, statusLabel));
 
-        getChildren().addAll(
-                title,
-                description,
-                filters,
-                table,
-                refreshButton,
-                statusLabel
-        );
+        TableColumn<AssetInspection, String> assignmentColumn =
+                new TableColumn<>("Assigned technician");
+        assignmentColumn.setCellValueFactory(
+                data ->
+                        new javafx.beans.property.SimpleStringProperty(
+                                data.getValue().getAssignedTechnicianId() == 0
+                                        ? "Unassigned"
+                                        : "#" + data.getValue().getAssignedTechnicianId()));
+        table.getColumns().add(assignmentColumn);
+        getChildren().addAll(title, description, filters, table, refreshButton, statusLabel);
 
-        loadInspections(
-                service,
-                sourceItems,
-                refreshButton,
-                statusLabel
-        );
+        loadInspections(service, sourceItems, refreshButton, statusLabel);
     }
 
     private void loadInspections(
@@ -272,36 +203,28 @@ public class AssetInspectionDirectoryView extends VBox {
             Label statusLabel) {
         refreshButton.setDisable(true);
 
-        try {
-            sourceItems.setAll(
-                    service.getAllAssetInspections()
-            );
-            statusLabel.setStyle(
-                    "-fx-text-fill: #15803d;"
-            );
-            statusLabel.setText(
-                    sourceItems.size()
-                            + " inspections loaded"
-            );
-        } catch (AceOsServiceException exception) {
-            statusLabel.setStyle(
-                    "-fx-text-fill: #b91c1c;"
-            );
-            statusLabel.setText(exception.getMessage());
-        } finally {
-            refreshButton.setDisable(false);
-        }
+        com.aceos.ui.FxTasks.run(
+                () -> service.getAllAssetInspections(),
+                loaded -> {
+                    sourceItems.setAll(loaded);
+                    statusLabel.setStyle("-fx-text-fill: #15803d;");
+                    statusLabel.setText(sourceItems.size() + " inspections loaded");
+                },
+                exception -> {
+                    statusLabel.setStyle("-fx-text-fill: #b91c1c;");
+                    statusLabel.setText(exception.getMessage());
+                },
+                () -> {
+                    refreshButton.setDisable(false);
+                });
     }
 
-    private String getComplianceState(
-            AssetInspection inspection) {
-        if (inspection.getStatus()
-                == InspectionStatus.PASSED) {
+    private String getComplianceState(AssetInspection inspection) {
+        if (inspection.getStatus() == InspectionStatus.PASSED) {
             return "COMPLIANT";
         }
 
-        if (inspection.getStatus()
-                == InspectionStatus.FAILED) {
+        if (inspection.getStatus() == InspectionStatus.FAILED) {
             return "NON-COMPLIANT";
         }
 

@@ -9,6 +9,7 @@ import java.sql.SQLException;
 public class UserRepositoryTest {
 
     public static void main(String[] args) throws SQLException {
+        com.aceos.security.LegacyVerificationGuard.retired();
         UserRepository repository = new UserRepository();
 
         String uniqueEmail =
