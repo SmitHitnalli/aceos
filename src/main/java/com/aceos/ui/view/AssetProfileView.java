@@ -23,15 +23,17 @@ public final class AssetProfileView extends ScrollPane {
     private final TextArea reason = new TextArea();
     private final Label evidenceHint = new Label();
     private AssetProfile loaded;
-    private boolean busy, stale = true;
+    private boolean busy, saving, stale = true;
+    private String savedFeedback;
 
     public AssetProfileView(AceOsService service, int assetId, Runnable returnToList) {
         this.service = service; this.assetId = assetId;
+        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !reason.getText().isEmpty() || evidence.getValue() != null || loaded != null && lifecycle.getValue() != null && lifecycle.getValue() != loaded.asset().getManualLifecycle());
         setId("asset-profile"); getStyleClass().add("dashboard"); setFitToWidth(true); setHbarPolicy(ScrollBarPolicy.NEVER);
         content.setPadding(new Insets(24)); content.setMinWidth(0);
         heading.getStyleClass().add("title"); heading.setWrapText(true);
         refresh.setId("asset-profile-refresh"); refresh.setOnAction(e -> load());
-        back.setId("asset-profile-back"); back.setOnAction(e -> returnToList.run());
+        back.setId("asset-profile-back"); back.setOnAction(e -> { if (com.aceos.ui.NavigationGuard.allowLeave(this)) returnToList.run(); });
         feedback.setId("asset-profile-feedback"); feedback.setWrapText(true);
         details.setId("asset-profile-details"); details.getStyleClass().add("dashboard-card");
         actions.setId("availability-actions"); actions.getStyleClass().add("dashboard-card");
@@ -109,22 +111,22 @@ public final class AssetProfileView extends ScrollPane {
     }
     private void load() {
         if (busy) return;
-        stale = true; setBusy(true); message("Loading authorized asset profile…", false);
+        stale = true; setBusy(true); message(savedFeedback == null ? "Loading authorized asset profile…" : savedFeedback + " Refreshing profile…", false);
         FxTasks.run(() -> service.getAssetProfile(assetId), profile -> {
-            render(profile); message("Current asset profile loaded.", false); refresh.setText("Refresh");
+            render(profile); message(savedFeedback == null ? "Current asset profile loaded." : savedFeedback, false); refresh.setText("Refresh");
         }, error -> {
             loaded = null; details.getChildren().clear(); content.getChildren().remove(actions);
-            message(error.getMessage() + " Retry to reload.", true); refresh.setText("Retry");
+            message((savedFeedback == null ? error.getMessage() : savedFeedback + " Profile could not be refreshed.") + " Retry to reload.", true); refresh.setText("Retry");
         }, () -> setBusy(false));
     }
     private void write(Callable<?> action, String success) {
-        setBusy(true); message("Saving…", false);
-        FxTasks.run(() -> { action.call(); return service.getAssetProfile(assetId); }, profile -> {
-            render(profile); reason.clear(); message(success, false); setVvalue(0);
+        saving = true; savedFeedback = null; setBusy(true); message("Saving…", false);
+        FxTasks.run(action, result -> {
+            saving = false; savedFeedback = success; reason.clear(); evidence.setValue(null); setBusy(false); load(); setVvalue(0);
         }, error -> {
-            stale = true; actions.setDisable(true);
-            message(error.getMessage() + " Input retained. Refresh before another action.", true); setVvalue(0);
-        }, () -> setBusy(false));
+            saving = false; stale = true; actions.setDisable(true);
+            message(error.getMessage() + " Input retained. Refresh before another action.", true); setVvalue(0); setBusy(false);
+        }, () -> {});
     }
     private void render(AssetProfile profile) {
         loaded = profile; stale = false; var a = profile.asset();

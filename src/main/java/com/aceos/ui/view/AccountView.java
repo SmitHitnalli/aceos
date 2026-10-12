@@ -37,6 +37,7 @@ public final class AccountView extends VBox {
         confirmation.setId("password-confirmation");
         status.setId("password-feedback");
         boolean[] busy = {false};
+        com.aceos.ui.NavigationGuard.install(this, () -> busy[0], () -> !current.getText().isEmpty() || !next.getText().isEmpty() || !confirmation.getText().isEmpty());
         save.getStyleClass().add("primary");
         Button logout = new Button("Sign out");
         save.setOnAction(
@@ -75,7 +76,7 @@ public final class AccountView extends VBox {
                                 logout.setDisable(false);
                             });
                 });
-        logout.setOnAction(e -> onLogout.run());
+        logout.setOnAction(e -> { if (com.aceos.ui.NavigationGuard.allowLeave(this)) onLogout.run(); });
         current.setOnAction(e -> next.requestFocus());
         next.setOnAction(e -> confirmation.requestFocus());
         confirmation.setOnAction(e -> save.fire());

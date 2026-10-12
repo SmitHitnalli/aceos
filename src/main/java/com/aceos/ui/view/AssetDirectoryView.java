@@ -23,7 +23,9 @@ public class AssetDirectoryView extends BorderPane {
     private final Label feedback = new Label();
     private boolean busy;
 
-    public AssetDirectoryView(AceOsService service) {
+    public AssetDirectoryView(AceOsService service) { this(service, false); }
+
+    public AssetDirectoryView(AceOsService service, boolean registration) {
         this.service = service; setId("asset-directory");
         VBox content = new VBox(12); content.setPadding(new Insets(24)); content.setMinWidth(0);
         Label title = new Label("Assets"); title.getStyleClass().add("title");
@@ -65,8 +67,19 @@ public class AssetDirectoryView extends BorderPane {
         feedback.setId("asset-feedback"); feedback.setWrapText(true);
         content.getChildren().addAll(new FlowPane(12, 8, title, refresh), description, feedback,
                 searchLabel, search, new FlowPane(8, 8, statusLabel, status), table, open);
+        try {
+            if (service.signedInUser().getRole() == UserRole.ADMINISTRATOR) {
+                Button register = new Button("Register asset"); register.setId("asset-register");
+                register.getStyleClass().add("primary"); register.setOnAction(e -> showRegistration());
+                content.getChildren().add(2, register);
+            }
+        } catch (com.aceos.service.AceOsServiceException ignored) { /* Authorized reads still report session errors. */ }
         list.getStyleClass().add("dashboard"); list.setFitToWidth(true); list.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); list.setContent(content);
-        setCenter(list); load();
+        setCenter(list);
+        if (registration && content.lookup("#asset-register") != null) showRegistration(); else load();
+    }
+    private void showRegistration() {
+        setCenter(new AssetManagementView(service, () -> { setCenter(list); load(); }));
     }
     private void column(String title, Function<Asset, String> display, int width) {
         TableColumn<Asset, String> column = new TableColumn<>(title); column.setMinWidth(80); column.setPrefWidth(width);

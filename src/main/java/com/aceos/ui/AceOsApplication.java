@@ -24,6 +24,7 @@ public class AceOsApplication extends Application {
         stage.setMinWidth(800);
         stage.setMinHeight(520);
         stage.setScene(scene);
+        stage.setOnCloseRequest(event -> { if (!NavigationGuard.allowLeave(root)) event.consume(); });
         stage.show();
     }
 

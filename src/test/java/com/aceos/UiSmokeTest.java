@@ -317,7 +317,14 @@ class UiSmokeTest {
                         ((javafx.scene.control.Button) workspace.lookup("#shell-menu")).fire();
                         if (workspace.getLeft() == null) ((javafx.scene.control.Button) workspace.lookup("#shell-menu")).fire();
                         workspace.applyCss(); workspace.layout();
-                        assertTrue(workspace.lookup("#nav-" + destination).getStyleClass().contains("nav-active"));
+                        String sidebarRoute = role == com.aceos.model.UserRole.ADMINISTRATOR ? switch (destination) {
+                            case "review", "assign" -> "complaints"; case "verify" -> "jobs";
+                            case "assignments", "overdue-inspections", "schedule-inspection" -> "inspections";
+                            case "availability", "register" -> "assets";
+                            case "overdue-schedules", "create-schedule", "schedule-directory" -> "schedules";
+                            case "users" -> "accounts"; default -> destination;
+                        } : destination;
+                        assertTrue(workspace.lookup("#nav-" + sidebarRoute).getStyleClass().contains("nav-active"));
                     }
                     if (role != com.aceos.model.UserRole.ADMINISTRATOR) {
                         assertThrows(IllegalArgumentException.class, () -> workspace.navigate("accounts"));
@@ -1023,7 +1030,7 @@ class UiSmokeTest {
             accounts = java.util.stream.Stream.concat(accounts.stream(),java.util.stream.Stream.of(new com.aceos.security.AccountSummary(88,n,e,r,"PENDING_ACTIVATION",true,false))).toList();
             return user;
         }
-        @Override public void changeAccountRole(int id,com.aceos.model.UserRole role) throws com.aceos.service.AceOsServiceException { write(id); lastRole=role; }
+        @Override public void changeAccountRole(int id,com.aceos.model.UserRole role) throws com.aceos.service.AceOsServiceException { write(id); lastRole=role; accounts=accounts.stream().map(a -> a.userId()==id ? new com.aceos.security.AccountSummary(a.userId(),a.name(),a.email(),role,a.state(),a.passwordChangeRequired(),a.locked()) : a).toList(); }
         @Override public void unlockAccount(int id) throws com.aceos.service.AceOsServiceException { write(id); }
         @Override public void deactivateAccount(int id) throws com.aceos.service.AceOsServiceException { write(id); }
         @Override public com.aceos.security.IssuedCredential issueCredential(int id) throws com.aceos.service.AceOsServiceException { write(id); return new com.aceos.security.IssuedCredential(id,"Disposable UI fixture only",java.time.Instant.now().plusSeconds(86400)); }
@@ -1120,7 +1127,7 @@ class UiSmokeTest {
             fx(() -> { var root=reference.get(); fire(root,"accounts-new"); snapshot(root,size,"accounts-shell-create",true);
                 var scroll=(javafx.scene.control.ScrollPane)((AccountManagementView)root.lookup("#account-management")).getCenter(); scroll.setVvalue(1); root.layout(); snapshot(root,size,"accounts-shell-create-action",true);
                 var node=root.lookup("#accounts-create"); var b=node.localToScene(node.getBoundsInLocal()); assertTrue(b.getMinY()>=0 && b.getMaxY()<=size[1]);
-                root.navigate("users"); assertTrue(root.getCenter() instanceof UserDirectoryView);
+                root.navigate("users"); assertTrue(root.getCenter() instanceof AccountManagementView);
                 fire(root,"shell-account"); snapshot(root,size,"accounts-shell-own",true);
                 var ownScroll=(javafx.scene.control.ScrollPane)root.getCenter(); ownScroll.setVvalue(1); root.layout(); snapshot(root,size,"accounts-shell-own-action",true);
                 var save=root.lookup("#password-save"); var saveBounds=save.localToScene(save.getBoundsInLocal()); assertTrue(saveBounds.getMinY()>=0 && saveBounds.getMaxY()<=size[1]);
@@ -1150,6 +1157,184 @@ class UiSmokeTest {
             assertEquals(0,changed.get()); assertTrue(((javafx.scene.control.Label)own.get().lookup("#own-account-identity")).getText().contains("admin@aceos.local")); ownFailure.set(false); fire(own.get(),"password-save"); return null; });
         awaitControl(own.get(),"password-save");
         fx(() -> { assertEquals(2,ownWrites.get()); assertEquals(1,changed.get()); for (String id : new String[]{"current","next","confirmation"}) assertEquals("",((javafx.scene.control.TextField)own.get().lookup("#password-"+id)).getText()); return null; });
+    }
+
+    @Test
+    void administratorSevenPagesPreserveQueuesCreationAndDepartureProtection() throws Exception {
+        for (int[] size : new int[][]{{800,520},{1280,800}}) {
+            var asset = new RegistrationPreview();
+            var flow = new FlowPreview(com.aceos.model.UserRole.ADMINISTRATOR,false);
+            var inspections = new InspectionPreview(com.aceos.model.UserRole.ADMINISTRATOR);
+            var schedules = new SchedulePreview(com.aceos.model.UserRole.ADMINISTRATOR);
+            var service = new AccountsPreview() {
+                @Override public java.util.List<com.aceos.model.Asset> getAllAssets() { return java.util.List.of(flow.asset); }
+                @Override public com.aceos.model.AssetProfile getAssetProfile(int id) throws com.aceos.service.AceOsServiceException { return asset.getAssetProfile(id); }
+                @Override public java.util.List<com.aceos.model.Complaint> getAllComplaints() { return java.util.List.of(flow.complaint); }
+                @Override public java.util.List<com.aceos.model.WorkOrder> getAllWorkOrders() { return java.util.List.of(); }
+                @Override public java.util.List<com.aceos.model.AssetInspection> getAllAssetInspections() { return java.util.List.of(inspections.inspection); }
+                @Override public java.util.List<com.aceos.model.PreventiveMaintenanceSchedule> getAllPreventiveMaintenanceSchedules() { return java.util.List.of(schedules.schedule); }
+            };
+            var ref=new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+            fx(() -> { var root=new com.aceos.ui.WorkspaceView(service,() -> {},() -> {}); ref.set(root); new Scene(root,size[0],size[1]); root.resize(size[0],size[1]); root.applyCss(); root.layout(); return null; });
+            awaitControl(ref.get(),"dashboard-refresh");
+            fx(() -> {
+                var root=ref.get(); if(root.getLeft()==null) fire(root,"shell-menu"); root.applyCss();root.layout();
+                var nav=(javafx.scene.layout.VBox)((javafx.scene.control.ScrollPane)root.getLeft()).getContent();
+                assertEquals(java.util.List.of("Dashboard","Assets","Complaints","Work orders","Inspections","Preventive schedules","Accounts"),nav.getChildren().stream().map(n -> ((javafx.scene.control.Button)n).getText()).toList());
+                for(var n:nav.getChildren()) { assertTrue(n.isFocusTraversable()); var bounds=n.localToScene(n.getBoundsInLocal()); assertTrue(bounds.getMinX()>=0 && bounds.getMaxX()<=size[0]); }
+                snapshot(root,size,"administrator-seven-tabs",true);
+                for(String removed:java.util.List.of("review","assign","verify","assignments","availability","register","overdue-schedules","create-schedule","schedule-inspection","schedule-directory","users")) assertNull(root.lookup("#nav-"+removed));
+                fire(root,"dashboard-action-review"); if(root.getLeft()==null) fire(root,"shell-menu"); root.applyCss();root.layout(); assertEquals("SUBMITTED",((javafx.scene.control.ComboBox<?>)root.lookup("#repair-status")).getValue()); assertTrue(root.lookup("#nav-complaints").getStyleClass().contains("nav-active"));
+                navigateAdministratorPreview(root,"assign"); assertEquals("ACCEPTED",((javafx.scene.control.ComboBox<?>)root.lookup("#repair-status")).getValue());
+                navigateAdministratorPreview(root,"verify"); assertEquals("COMPLETED",((javafx.scene.control.ComboBox<?>)root.lookup("#repair-status")).getValue()); assertTrue(root.lookup("#nav-jobs").getStyleClass().contains("nav-active"));
+                navigateAdministratorPreview(root,"assignments"); assertEquals("UNASSIGNED",((javafx.scene.control.ComboBox<?>)root.lookup("#inspection-filter")).getValue());
+                navigateAdministratorPreview(root,"overdue-inspections"); assertEquals("OVERDUE",((javafx.scene.control.ComboBox<?>)root.lookup("#inspection-filter")).getValue()); assertTrue(root.lookup("#nav-inspections").getStyleClass().contains("nav-active"));
+                navigateAdministratorPreview(root,"overdue-schedules"); assertEquals("OVERDUE",((javafx.scene.control.ComboBox<?>)root.lookup("#schedule-filter")).getValue()); assertTrue(root.lookup("#nav-schedules").getStyleClass().contains("nav-active"));
+                navigateAdministratorPreview(root,"assets"); root.applyCss(); root.layout(); fire(root,"asset-register"); root.applyCss();root.layout();
+                assertNotNull(root.lookup("#registration-save")); assertNotNull(root.lookup("#registration-back")); assertTrue(root.lookup("#nav-assets").getStyleClass().contains("nav-active"));
+                ((javafx.scene.control.TextField)root.lookup("#registration-name")).setText("Unsaved walkthrough asset");
+                answerDeparture(false); fire(root,"registration-back"); assertEquals("Unsaved walkthrough asset",((javafx.scene.control.TextField)root.lookup("#registration-name")).getText());
+                answerDeparture(false); navigateAdministratorPreview(root,"accounts"); assertNotNull(root.lookup("#registration-name"));
+                answerDeparture(true); fire(root,"registration-back"); root.applyCss();root.layout(); assertNotNull(root.lookup("#asset-table"));
+                navigateAdministratorPreview(root,"register"); root.applyCss();root.layout(); snapshot(root,size,"administrator-assets-registration",true); assertNotNull(root.lookup("#registration-back"));
+                fire(root,"registration-back"); navigateAdministratorPreview(root,"inspections"); return null;
+            }); awaitControl(ref.get(),"inspection-refresh");
+            fx(() -> { var root=ref.get(); fire(root,"inspection-new"); return null; }); awaitControl(ref.get(),"inspection-refresh");
+            fx(() -> { assertNotNull(ref.get().lookup("#inspection-create")); assertTrue(ref.get().lookup("#nav-inspections").getStyleClass().contains("nav-active")); fire(ref.get(),"inspection-back"); navigateAdministratorPreview(ref.get(),"schedules"); return null; }); awaitControl(ref.get(),"schedule-refresh");
+            fx(() -> { fire(ref.get(),"schedule-new"); return null; }); awaitControl(ref.get(),"schedule-refresh");
+            fx(() -> { assertNotNull(ref.get().lookup("#schedule-create")); assertTrue(ref.get().lookup("#nav-schedules").getStyleClass().contains("nav-active")); fire(ref.get(),"schedule-back"); navigateAdministratorPreview(ref.get(),"accounts"); return null; }); awaitControl(ref.get(),"accounts-refresh");
+            fx(() -> { var root=ref.get(); fire(root,"accounts-new");root.applyCss();root.layout(); assertNotNull(root.lookup("#accounts-create")); fire(root,"shell-account");root.applyCss();root.layout(); assertNotNull(root.lookup("#password-save")); assertTrue(root.lookupAll(".nav-active").isEmpty());
+                for(var role:new com.aceos.model.UserRole[]{com.aceos.model.UserRole.REQUESTER,com.aceos.model.UserRole.TECHNICIAN}) { var denied=new com.aceos.ui.WorkspaceView(new AssetPreview(role),() -> {},() -> {}); assertThrows(IllegalArgumentException.class,() -> denied.navigate("register")); assertThrows(IllegalArgumentException.class,() -> denied.navigate("overdue-inspections")); assertThrows(IllegalArgumentException.class,() -> denied.navigate("users")); }
+                return null;
+            });
+        }
+    }
+
+    private void navigateAdministratorPreview(com.aceos.ui.WorkspaceView root, String key) {
+        root.navigate(key);
+        if (root.getLeft()==null) fire(root,"shell-menu");
+        root.applyCss(); root.layout();
+    }
+
+    private void answerDeparture(boolean discard) {
+        Platform.runLater(() -> {
+            var pane = javafx.stage.Window.getWindows().stream().map(w -> w.getScene() == null ? null : w.getScene().getRoot())
+                    .filter(n -> n instanceof javafx.scene.control.DialogPane && "navigation-guard".equals(n.getId()))
+                    .map(n -> (javafx.scene.control.DialogPane)n).findFirst().orElseThrow();
+            var stay = pane.getButtonTypes().stream().filter(b -> b.getText().equals("Stay")).findFirst().orElseThrow();
+            assertTrue(((javafx.scene.control.Button)pane.lookupButton(stay)).isDefaultButton());
+            var answer = discard ? pane.getButtonTypes().stream().filter(b -> b.getText().equals("Discard and leave")).findFirst().orElseThrow() : stay;
+            ((javafx.scene.control.Button)pane.lookupButton(answer)).fire();
+        });
+    }
+
+    @Test
+    void closeoutShellDeparturePreservesInputAndBlocksSavingReentry() throws Exception {
+        for (int[] size : new int[][]{{800,520},{1280,800}}) {
+            var service = new FlowPreview(com.aceos.model.UserRole.REQUESTER,false);
+            var root = new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+            var logout = new java.util.concurrent.atomic.AtomicBoolean();
+            fx(() -> { var w=new com.aceos.ui.WorkspaceView(service,() -> logout.set(true),() -> {}); root.set(w); new Scene(w,size[0],size[1]); w.resize(size[0],size[1]); w.navigate("report"); return null; });
+            awaitControl(root.get(),"report-refresh");
+            fx(() -> {
+                var w=root.get(); var form=w.getCenter();
+                ((javafx.scene.control.TextArea)w.lookup("#report-description")).setText("Cooling failure");
+                answerDeparture(false); w.navigate("dashboard"); assertSame(form,w.getCenter());
+                answerDeparture(false); fire(w,"shell-account"); assertSame(form,w.getCenter());
+                answerDeparture(false); fire(w,"shell-logout"); assertFalse(logout.get());
+                answerDeparture(false); assertFalse(com.aceos.ui.NavigationGuard.allowLeave(w)); // same path used by window close
+                assertEquals("Cooling failure",((javafx.scene.control.TextArea)w.lookup("#report-description")).getText());
+                ((javafx.scene.control.ComboBox<?>)w.lookup("#report-asset-choice")).getSelectionModel().selectFirst();
+                @SuppressWarnings("unchecked") var priority=(javafx.scene.control.ComboBox<com.aceos.model.ComplaintPriority>)w.lookup("#report-priority"); priority.setValue(com.aceos.model.ComplaintPriority.HIGH);
+                service.gate=new CountDownLatch(1); fire(w,"report-submit");
+                answerDeparture(false); w.navigate("report"); assertSame(form,w.getCenter());
+                answerDeparture(false); fire(w,"shell-account"); assertSame(form,w.getCenter());
+                answerDeparture(false); fire(w,"shell-logout"); assertFalse(logout.get());
+                snapshot(w,size,"closeout-saving-guard",true);
+                return null;
+            });
+            service.gate.countDown(); awaitControl(root.get(),"report-submit"); assertEquals(1,service.writes.get());
+            fx(() -> {
+                var w=root.get(); ((javafx.scene.control.TextArea)w.lookup("#report-description")).setText("Unsubmitted draft");
+                answerDeparture(true); w.navigate("dashboard"); assertTrue(w.getCenter() instanceof DashboardView);
+                w.navigate("report"); w.applyCss(); w.layout(); assertEquals("",((javafx.scene.control.TextArea)w.lookup("#report-description")).getText());
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void closeoutAllFormsAndInternalBackProtectUnfinishedEntries() throws Exception {
+        for (int[] size : new int[][]{{800,520},{1280,800}}) {
+            var service=new SchedulePreview(com.aceos.model.UserRole.ADMINISTRATOR);
+            var schedules=new java.util.concurrent.atomic.AtomicReference<PreventiveScheduleFlowView>();
+            fx(() -> { var v=new PreventiveScheduleFlowView(service,null,null,true); schedules.set(v); new Scene(v,size[0],size[1]); return null; }); awaitControl(schedules.get(),"schedule-refresh");
+            fx(() -> {
+                var v=schedules.get(); ((javafx.scene.control.TextField)v.lookup("#schedule-task")).setText("Retain this task");
+                answerDeparture(false); fire(v,"schedule-back"); assertNotNull(v.lookup("#schedule-task"));
+                snapshot(v,size,"closeout-retained-schedule",true);
+                answerDeparture(true); fire(v,"schedule-back"); assertNotNull(v.lookup("#schedule-table")); return null;
+            });
+            var inspection=new java.util.concurrent.atomic.AtomicReference<InspectionFlowView>();
+            fx(() -> { var v=new InspectionFlowView(new InspectionPreview(com.aceos.model.UserRole.TECHNICIAN),null,71,false); inspection.set(v); new Scene(v,size[0],size[1]); return null; }); awaitControl(inspection.get(),"inspection-refresh");
+            fx(() -> { var v=inspection.get(); ((javafx.scene.control.TextArea)v.lookup("#inspection-notes")).setText("Retain findings"); answerDeparture(false); fire(v,"inspection-back"); assertEquals("Retain findings",((javafx.scene.control.TextArea)v.lookup("#inspection-notes")).getText()); answerDeparture(true); fire(v,"inspection-back"); return null; });
+            var accounts=new java.util.concurrent.atomic.AtomicReference<AccountManagementView>();
+            fx(() -> { var v=new AccountManagementView(new AccountsPreview()); accounts.set(v); new Scene(v,size[0],size[1]); return null; }); awaitControl(accounts.get(),"accounts-refresh");
+            fx(() -> {
+                var v=accounts.get(); fire(v,"accounts-new"); v.applyCss(); v.layout(); ((javafx.scene.control.TextField)v.lookup("#accounts-name")).setText("Unfinished account");
+                answerDeparture(false); fire(v,"accounts-create-back"); assertEquals("Unfinished account",((javafx.scene.control.TextField)v.lookup("#accounts-name")).getText());
+                answerDeparture(true); fire(v,"accounts-create-back"); assertNotNull(v.lookup("#accounts-table"));
+                var registration=new AssetManagementView(new RegistrationPreview()); new Scene(registration,size[0],size[1]); registration.applyCss(); registration.layout();
+                ((javafx.scene.control.TextField)registration.lookup("#registration-code")).setText("UNSAVED"); answerDeparture(false); assertFalse(com.aceos.ui.NavigationGuard.allowLeave(registration));
+                var own=new AccountView(new AccountsPreview(),false,() -> {},() -> {}); new Scene(own,size[0],size[1]);
+                ((javafx.scene.control.PasswordField)own.lookup("#password-next")).setText("Disposable fixture passphrase"); answerDeparture(false); assertFalse(com.aceos.ui.NavigationGuard.allowLeave(own));
+                return null;
+            });
+        }
+    }
+
+    @Test
+    void closeoutInspectionAndScheduleSavedFeedbackSurvivesReadFailure() throws Exception {
+        for (int[] size : new int[][]{{800,520},{1280,800}}) {
+            var service=new InspectionPreview(com.aceos.model.UserRole.ADMINISTRATOR);
+            var root=new java.util.concurrent.atomic.AtomicReference<InspectionFlowView>();
+            fx(() -> { var v=new InspectionFlowView(service,null,null,true); root.set(v); new Scene(v,size[0],size[1]); return null; }); awaitControl(root.get(),"inspection-refresh");
+            fx(() -> { var v=root.get(); ((javafx.scene.control.ComboBox<?>)v.lookup("#inspection-asset-choice")).getSelectionModel().selectFirst(); ((javafx.scene.control.TextField)v.lookup("#inspection-type")).setText("Fire safety"); service.gate=new CountDownLatch(1); fire(v,"inspection-create"); return null; });
+            awaitFx(() -> service.writes.get()==1,true); service.failRead=true; service.gate.countDown(); awaitControl(root.get(),"inspection-refresh");
+            fx(() -> { var v=root.get(); assertTrue(((javafx.scene.control.Label)v.lookup("#inspection-feedback")).getText().contains("Inspection scheduled.")); assertTrue(((javafx.scene.control.Label)v.lookup("#inspection-feedback")).getText().contains("could not be refreshed")); snapshot(v,size,"closeout-inspection-saved-read-failure",true); service.failRead=false; fire(v,"inspection-refresh"); return null; }); awaitControl(root.get(),"inspection-refresh");
+            fx(() -> { assertTrue(((javafx.scene.control.Label)root.get().lookup("#inspection-feedback")).getText().contains("Inspection scheduled.")); return null; }); assertEquals(1,service.writes.get());
+            var schedule=new SchedulePreview(com.aceos.model.UserRole.ADMINISTRATOR);
+            var schedules=new java.util.concurrent.atomic.AtomicReference<PreventiveScheduleFlowView>();
+            fx(() -> { var v=new PreventiveScheduleFlowView(schedule,null,null,true); schedules.set(v); new Scene(v,size[0],size[1]); return null; }); awaitControl(schedules.get(),"schedule-refresh");
+            fx(() -> { var v=schedules.get(); ((javafx.scene.control.ComboBox<?>)v.lookup("#schedule-asset-choice")).getSelectionModel().selectFirst(); ((javafx.scene.control.TextField)v.lookup("#schedule-task")).setText("Clean filters"); ((javafx.scene.control.TextField)v.lookup("#schedule-frequency")).setText("30"); schedule.gate=new CountDownLatch(1); fire(v,"schedule-create"); return null; });
+            awaitFx(() -> schedule.writes.get()==1,true); schedule.failRead=true; schedule.gate.countDown(); awaitControl(schedules.get(),"schedule-refresh");
+            fx(() -> { var v=schedules.get(); var feedback=((javafx.scene.control.Label)v.lookup("#schedule-feedback")).getText(); assertTrue(feedback.contains("Schedule created.")); assertTrue(feedback.contains("could not be refreshed")); snapshot(v,size,"closeout-schedule-saved-read-failure",true); schedule.failRead=false; fire(v,"schedule-refresh"); return null; }); awaitControl(schedules.get(),"schedule-refresh");
+            fx(() -> { assertTrue(((javafx.scene.control.Label)schedules.get().lookup("#schedule-feedback")).getText().contains("Schedule created.")); return null; }); assertEquals(1,schedule.writes.get());
+        }
+    }
+
+    @Test
+    void closeoutRepairAndAssetSavedFeedbackSurvivesReadFailure() throws Exception {
+        for (int[] size : new int[][]{{800,520},{1280,800}}) {
+            var fixture=new FlowPreview(com.aceos.model.UserRole.ADMINISTRATOR,false);
+            var failRead=new java.util.concurrent.atomic.AtomicBoolean(); var writes=new java.util.concurrent.atomic.AtomicInteger();
+            var service=new AceOsService() {
+                @Override public com.aceos.model.User signedInUser() { return fixture.signedInUser(); }
+                @Override public com.aceos.model.RepairDetail getRepairDetail(int id) throws com.aceos.service.AceOsServiceException { if (failRead.get()) throw new com.aceos.service.AceOsServiceException("Read failed"); return fixture.detail(); }
+                @Override public com.aceos.model.Complaint acceptComplaint(int id) { fixture.complaint.accept(signedInUser()); writes.incrementAndGet(); failRead.set(true); return fixture.complaint; }
+                @Override public java.util.List<com.aceos.model.User> getActiveTechnicians() { return java.util.List.of(fixture.technician); }
+            };
+            var root=new java.util.concurrent.atomic.AtomicReference<RepairFlowView>();
+            fx(() -> { var v=new RepairFlowView(service,false,null,42); root.set(v); new Scene(v,size[0],size[1]); return null; }); awaitControl(root.get(),"repair-refresh");
+            fx(() -> { fire(root.get(),"repair-accept"); return null; }); awaitControl(root.get(),"repair-refresh");
+            fx(() -> { var v=root.get(); assertTrue(((javafx.scene.control.Label)v.lookup("#repair-feedback")).getText().contains("Action saved successfully.")); assertNull(v.lookup("#repair-accept")); snapshot(v,size,"closeout-repair-saved-read-failure",true); failRead.set(false); fire(v,"repair-refresh"); return null; }); awaitControl(root.get(),"repair-refresh"); assertEquals(1,writes.get());
+            var asset=new AssetPreview(com.aceos.model.UserRole.ADMINISTRATOR);
+            var profile=new java.util.concurrent.atomic.AtomicReference<AssetProfileView>();
+            fx(() -> { var v=new AssetProfileView(asset,101,() -> {}); profile.set(v); new Scene(v,size[0],size[1]); return null; }); awaitControl(profile.get(),"asset-profile-refresh");
+            fx(() -> { var v=profile.get(); ((javafx.scene.control.TextArea)v.lookup("#availability-reason")).setText("Keep my reason"); @SuppressWarnings("unchecked") var lifecycle=(javafx.scene.control.ComboBox<com.aceos.model.ManualLifecycle>)v.lookup("#availability-lifecycle"); lifecycle.setValue(com.aceos.model.ManualLifecycle.OUT_OF_SERVICE); asset.gate=new CountDownLatch(1); fire(v,"availability-change"); return null; });
+            awaitFx(() -> asset.writes.get()==1,true); asset.failRead=true; asset.gate.countDown(); awaitControl(profile.get(),"asset-profile-refresh");
+            fx(() -> { var v=profile.get(); assertTrue(((javafx.scene.control.Label)v.lookup("#asset-profile-feedback")).getText().contains("Lifecycle saved.")); assertNull(v.lookup("#availability-change")); asset.failRead=false; fire(v,"asset-profile-refresh"); return null; }); awaitControl(profile.get(),"asset-profile-refresh"); assertEquals(1,asset.writes.get());
+        }
     }
 
     private void snapshot(Region root, int[] size, String name) throws Exception {

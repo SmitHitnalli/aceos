@@ -36,10 +36,13 @@ public class InspectionFlowView extends ScrollPane {
     private final TextArea notes = new TextArea();
     private final DatePicker scheduled = new DatePicker(LocalDate.now().plusDays(7)), completed = new DatePicker(LocalDate.now());
     private Integer selectedId;
-    private boolean busy, stale = true, scheduleMode;
+    private boolean busy, saving, stale = true, scheduleMode;
+    private String savedFeedback;
+    private final LocalDate initialDate = LocalDate.now().plusDays(7);
 
     public InspectionFlowView(AceOsService service, String initialFilter, Integer inspectionId, boolean scheduleMode) {
         this.service = service;
+        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> this.scheduleMode && (!type.getText().isEmpty() || assets.selected() != null || !java.util.Objects.equals(scheduled.getValue(), initialDate)) || selectedId != null && (!notes.getText().isEmpty() || technicians.selected() != null || result.getValue() != InspectionStatus.PASSED || !java.util.Objects.equals(completed.getValue(), LocalDate.now())));
         User current;
         try { current = service.signedInUser(); } catch (AceOsServiceException e) { current = null; }
         user = current;
@@ -47,7 +50,7 @@ public class InspectionFlowView extends ScrollPane {
         content.setPadding(new Insets(24)); content.setMinWidth(0);
         refresh.setId("inspection-refresh"); back.setId("inspection-back"); feedback.setId("inspection-feedback");
         refresh.setOnAction(e -> load());
-        back.setOnAction(e -> { selectedId = null; this.scheduleMode = false; notes.clear(); technicians.clear(); load(); setVvalue(0); });
+        back.setOnAction(e -> { if (!com.aceos.ui.NavigationGuard.allowLeave(this)) return; savedFeedback = null; type.clear(); assets.clear(); scheduled.setValue(initialDate); notes.clear(); technicians.clear(); result.setValue(InspectionStatus.PASSED); completed.setValue(LocalDate.now()); selectedId = null; this.scheduleMode = false; load(); setVvalue(0); });
         Button newInspection = new Button("Schedule new inspection"); newInspection.setId("inspection-new");
         newInspection.setOnAction(e -> { if (!busy) { selectedId = null; this.scheduleMode = true; load(); setVvalue(0); } });
         content.getChildren().addAll(new FlowPane(12, 8, heading, refresh, back), feedback);
@@ -125,14 +128,14 @@ public class InspectionFlowView extends ScrollPane {
     }
     private void openSelected() { var i = table.getSelectionModel().getSelectedItem(); if (i != null && !busy && !stale) openRecord(i.getInspectionId()); }
     private void openRecord(int id) { selectedId = id; scheduleMode = false; notes.clear(); technicians.clear(); load(); setVvalue(0); }
-    private void load() { load(null); }
+    private void load() { load(savedFeedback); }
     private void load(String success) {
         if (busy) return;
         busy = true; stale = true; updateButtons();
         content.getChildren().removeAll(list, details, actions, scheduling);
         back.setVisible(selectedId != null || scheduleMode); back.setManaged(back.isVisible());
         heading.setText(scheduleMode ? "Schedule inspection" : selectedId == null ? "Inspections" : "Inspection #" + selectedId);
-        message("Loading inspections…", false);
+        message(success == null ? "Loading inspections…" : success + " Refreshing details…", false);
         if (scheduleMode) {
             content.getChildren().add(scheduling);
             FxTasks.run(() -> service.getAllAssets().stream().filter(a -> a.getManualLifecycle() != ManualLifecycle.RETIRED).toList(),
@@ -147,7 +150,7 @@ public class InspectionFlowView extends ScrollPane {
             int id = selectedId;
             FxTasks.run(() -> new Detail(service.getAssetInspection(id), user.getRole() == UserRole.ADMINISTRATOR ? service.getActiveTechnicians() : List.of()),
                     loaded -> { render(loaded); stale = false; message(success == null ? "Inspection details updated." : success, false); },
-                    e -> message(e.getMessage() + " Refresh or return to the list.", true), () -> { busy = false; updateButtons(); });
+                    e -> message((success == null ? e.getMessage() : success + " Details could not be refreshed.") + " Refresh or return to the list.", true), () -> { busy = false; updateButtons(); });
         }
     }
     private void render(Detail loaded) {
@@ -169,11 +172,12 @@ public class InspectionFlowView extends ScrollPane {
     }
     private void write(Callable<AssetInspection> operation, String success, boolean created) {
         if (busy || stale) return;
-        busy = true; updateButtons(); message("Saving…", false);
+        saving = true; savedFeedback = null; busy = true; updateButtons(); message("Saving…", false);
         FxTasks.run(operation, saved -> {
             if (created) { selectedId = saved.getInspectionId(); scheduleMode = false; type.clear(); assets.clear(); }
-            else if (user.getRole() == UserRole.TECHNICIAN) notes.clear();
-            busy = false; load(success); setVvalue(0);
-        }, e -> { stale = true; busy = false; updateButtons(); message(e.getMessage() + " Input retained. Refresh before retrying.", true); setVvalue(0); }, () -> {});
+            else if (user.getRole() == UserRole.ADMINISTRATOR) technicians.clear();
+            else if (user.getRole() == UserRole.TECHNICIAN) { notes.clear(); result.setValue(InspectionStatus.PASSED); completed.setValue(LocalDate.now()); }
+            saving = false; savedFeedback = success; busy = false; load(success); setVvalue(0);
+        }, e -> { saving = false; stale = true; busy = false; updateButtons(); message(e.getMessage() + " Input retained. Refresh before retrying.", true); setVvalue(0); }, () -> {});
     }
 }

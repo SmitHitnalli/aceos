@@ -20,6 +20,8 @@ import java.util.function.Supplier;
 /** Role navigation is an allow-list; all destinations still enforce service permissions. */
 public final class WorkspaceView extends BorderPane {
     private record Destination(Button button, Supplier<Node> view) {}
+    private record Shortcut(String parent, String title, Supplier<Node> view) {}
+    private final Map<String, Shortcut> shortcuts = new LinkedHashMap<>();
     private final Map<String, Destination> destinations = new LinkedHashMap<>();
     private final VBox navigation = new VBox(8);
     private final ScrollPane navigationScroll = new ScrollPane(navigation);
@@ -42,11 +44,12 @@ public final class WorkspaceView extends BorderPane {
         Button account = new Button("My account");
         account.setId("shell-account");
         account.setOnAction(e -> {
+            if (!NavigationGuard.allowLeave(getCenter())) return;
             select(null, "My account", new AccountView(service, false, passwordChanged, logout));
         });
         Button signOut = new Button("Sign out");
         signOut.setId("shell-logout");
-        signOut.setOnAction(e -> logout.run());
+        signOut.setOnAction(e -> { if (NavigationGuard.allowLeave(getCenter())) logout.run(); });
         menu.setId("shell-menu");
         menu.setOnAction(e -> setMenuVisible(getLeft() == null));
         reducedMotion.setSelected(Boolean.getBoolean("aceos.reducedMotion"));
@@ -91,23 +94,24 @@ public final class WorkspaceView extends BorderPane {
             add("assets", "Assigned assets", () -> new AssetDirectoryView(service));
             add("schedule-directory", "Assigned asset schedules", () -> new PreventiveMaintenanceDirectoryView(service));
         } else {
-            add("review", "Review complaints", () -> new RepairFlowView(service, false, "SUBMITTED"));
-            add("assign", "Assign work", () -> new RepairFlowView(service, false, "ACCEPTED"));
-            add("verify", "Verify maintenance", () -> new RepairFlowView(service, true, "COMPLETED"));
-            add("assignments", "Inspection assignments", () -> new InspectionFlowView(service, "UNASSIGNED", null, false));
-            add("availability", "Asset availability", () -> new AssetAvailabilityView(service));
-            add("schedules", "Manage schedules", () -> new PreventiveMaintenanceManagementView(service));
-            add("overdue-schedules", "Overdue schedules", () -> new PreventiveScheduleFlowView(service, "OVERDUE", null, false));
-            add("create-schedule", "Create schedule", () -> new PreventiveScheduleFlowView(service, null, null, true));
-            add("schedule-inspection", "Schedule inspections", () -> new AssetInspectionManagementView(service));
-            add("inspections", "Inspection directory", () -> new AssetInspectionDirectoryView(service));
-            add("schedule-directory", "Schedule directory", () -> new PreventiveMaintenanceDirectoryView(service));
-            add("complaints", "Complaint directory", () -> new RepairFlowView(service, false, null));
-            add("jobs", "Work order directory", () -> new RepairFlowView(service, true, null));
-            add("assets", "Asset directory", () -> new AssetDirectoryView(service));
-            add("register", "Register assets", () -> new AssetManagementView(service));
+            add("assets", "Assets", () -> new AssetDirectoryView(service));
+            add("complaints", "Complaints", () -> new RepairFlowView(service, false, null));
+            add("jobs", "Work orders", () -> new RepairFlowView(service, true, null));
+            add("inspections", "Inspections", () -> new InspectionFlowView(service, null, null, false));
+            add("schedules", "Preventive schedules", () -> new PreventiveScheduleFlowView(service, null, null, false));
             add("accounts", "Accounts", () -> new AccountManagementView(service));
-            add("users", "User directory", () -> new UserDirectoryView(service));
+            shortcut("review", "complaints", "Review complaints", () -> new RepairFlowView(service, false, "SUBMITTED"));
+            shortcut("assign", "complaints", "Assign work", () -> new RepairFlowView(service, false, "ACCEPTED"));
+            shortcut("verify", "jobs", "Verify maintenance", () -> new RepairFlowView(service, true, "COMPLETED"));
+            shortcut("assignments", "inspections", "Inspection assignments", () -> new InspectionFlowView(service, "UNASSIGNED", null, false));
+            shortcut("overdue-inspections", "inspections", "Overdue inspections", () -> new InspectionFlowView(service, "OVERDUE", null, false));
+            shortcut("availability", "assets", "Assets", () -> new AssetDirectoryView(service));
+            shortcut("register", "assets", "Assets", () -> new AssetDirectoryView(service, true));
+            shortcut("overdue-schedules", "schedules", "Overdue schedules", () -> new PreventiveScheduleFlowView(service, "OVERDUE", null, false));
+            shortcut("create-schedule", "schedules", "Preventive schedules", () -> new PreventiveScheduleFlowView(service, null, null, true));
+            shortcut("schedule-inspection", "inspections", "Inspections", () -> new InspectionFlowView(service, null, null, true));
+            shortcut("schedule-directory", "schedules", "Preventive schedules", () -> new PreventiveScheduleFlowView(service, null, null, false));
+            shortcut("users", "accounts", "Accounts", () -> new AccountManagementView(service));
         }
         widthProperty().addListener((observable, before, after) -> {
             boolean small = after.doubleValue() < 960;
@@ -124,6 +128,7 @@ public final class WorkspaceView extends BorderPane {
         try {
             return new DashboardView(service, this::navigate, (kind, id) -> {
                 if (kind.equals("Inspection")) {
+                    if (!NavigationGuard.allowLeave(getCenter())) return;
                     select("inspections", "Inspection #" + id, new InspectionFlowView(service, null, id, false));
                     if (narrow) setMenuVisible(false);
                 } else openRepair(service, kind.equals("Work order"), id);
@@ -137,6 +142,7 @@ public final class WorkspaceView extends BorderPane {
     }
 
     private void openRepair(AceOsService service, boolean work, int id) {
+        if (!NavigationGuard.allowLeave(getCenter())) return;
         String route = work ? "jobs" : "complaints";
         select(route, work ? "Repair progress" : "Complaint progress", new RepairFlowView(service, work, null, id));
         if (narrow) setMenuVisible(false);
@@ -153,10 +159,17 @@ public final class WorkspaceView extends BorderPane {
         navigation.getChildren().add(button);
     }
 
+    private void shortcut(String key, String parent, String title, Supplier<Node> view) {
+        shortcuts.put(key, new Shortcut(parent, title, view));
+    }
+
     public void navigate(String key) {
         Destination destination = destinations.get(key);
-        if (destination == null) throw new IllegalArgumentException("Screen unavailable for this role");
-        select(key, destination.button().getText(), destination.view().get());
+        Shortcut shortcut = shortcuts.get(key);
+        if (destination == null && shortcut == null) throw new IllegalArgumentException("Screen unavailable for this role");
+        if (!NavigationGuard.allowLeave(getCenter())) return;
+        if (destination != null) select(key, destination.button().getText(), destination.view().get());
+        else select(shortcut.parent(), shortcut.title(), shortcut.view().get());
         if (narrow) setMenuVisible(false);
     }
 
@@ -170,7 +183,7 @@ public final class WorkspaceView extends BorderPane {
         });
         screen.setText(title);
         screen.setAccessibleText("Current screen: " + title);
-        // Existing forms remain scrollable in the refreshed shell; their redesign is Phase 3.
+        // Connected views own their scrolling; plain forms use one shell wrapper.
         if (!(view instanceof ScrollPane) && !(view instanceof AssetDirectoryView) && !(view instanceof AssetManagementView) && !(view instanceof AccountManagementView)) {
             ScrollPane scroll = new ScrollPane(view);
             scroll.setFitToWidth(true);

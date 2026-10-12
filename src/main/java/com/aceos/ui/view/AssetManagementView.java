@@ -19,11 +19,20 @@ public class AssetManagementView extends BorderPane {
     private Asset saved;
     private boolean busy;
 
-    public AssetManagementView(AceOsService service) {
-        this.service = service; setId("asset-registration");
+    public AssetManagementView(AceOsService service) { this(service, null); }
+
+    public AssetManagementView(AceOsService service, Runnable returnToAssets) {
+        this.service = service;
+        com.aceos.ui.NavigationGuard.install(this, () -> busy, () -> saved == null && java.util.Arrays.stream(fields()).anyMatch(f -> !f.getText().isEmpty()));
+        setId("asset-registration");
         VBox content = new VBox(12); content.setPadding(new Insets(24)); content.setMinWidth(0);
         form.getStyleClass().add("dashboard"); form.setFitToWidth(true); form.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         form.setContent(content); setCenter(form);
+        if (returnToAssets != null) {
+            Button back = new Button("Back to assets"); back.setId("registration-back");
+            back.setOnAction(e -> { if (com.aceos.ui.NavigationGuard.allowLeave(this)) returnToAssets.run(); });
+            content.getChildren().add(back);
+        }
         content.getChildren().addAll(text("Register asset", "title"), text("All fields are required. New assets start with Active lifecycle and availability.", "muted"));
         try {
             if (service.signedInUser().getRole() != UserRole.ADMINISTRATOR) {
@@ -43,7 +52,7 @@ public class AssetManagementView extends BorderPane {
         open.setId("registration-open"); open.getStyleClass().add("primary");
         open.setOnAction(e -> {
             if (busy || saved == null) return;
-            setCenter(new AssetProfileView(service, saved.getAssetId(), () -> setCenter(new AssetDirectoryView(service))));
+            setCenter(new AssetProfileView(service, saved.getAssetId(), returnToAssets == null ? () -> setCenter(new AssetDirectoryView(service)) : returnToAssets));
         });
         another.setId("registration-another"); another.setOnAction(e -> {
             if (busy || saved == null) return;

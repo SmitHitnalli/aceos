@@ -31,10 +31,13 @@ public class PreventiveScheduleFlowView extends ScrollPane {
     private final DatePicker due = new DatePicker(LocalDate.now().plusDays(30)), completed = new DatePicker(LocalDate.now());
     private Integer selectedId;
     private PreventiveMaintenanceSchedule selected;
-    private boolean busy, stale = true, createMode;
+    private boolean busy, saving, stale = true, createMode;
+    private String savedFeedback;
+    private final LocalDate initialDate = LocalDate.now().plusDays(30);
 
     public PreventiveScheduleFlowView(AceOsService service, String initialFilter, Integer scheduleId, boolean createMode) {
         this.service = service;
+        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> this.createMode && (!task.getText().isEmpty() || !frequency.getText().isEmpty() || assets.selected() != null || !java.util.Objects.equals(due.getValue(), initialDate)) || selectedId != null && !java.util.Objects.equals(completed.getValue(), LocalDate.now()));
         User current;
         try { current = service.signedInUser(); } catch (AceOsServiceException e) { current = null; }
         user = current;
@@ -42,7 +45,7 @@ public class PreventiveScheduleFlowView extends ScrollPane {
         content.setPadding(new Insets(24)); content.setMinWidth(0);
         refresh.setId("schedule-refresh"); back.setId("schedule-back"); feedback.setId("schedule-feedback");
         refresh.setOnAction(e -> load());
-        back.setOnAction(e -> { selectedId = null; this.createMode = false; load(); setVvalue(0); });
+        back.setOnAction(e -> { if (!com.aceos.ui.NavigationGuard.allowLeave(this)) return; savedFeedback = null; task.clear(); frequency.clear(); assets.clear(); due.setValue(initialDate); completed.setValue(LocalDate.now()); selectedId = null; this.createMode = false; load(); setVvalue(0); });
         Button newSchedule = new Button("Create new schedule"); newSchedule.setId("schedule-new");
         newSchedule.setOnAction(e -> { if (!busy) { selectedId = null; this.createMode = true; load(); setVvalue(0); } });
         content.getChildren().addAll(new FlowPane(12, 8, heading, refresh, back), feedback);
@@ -120,14 +123,14 @@ public class PreventiveScheduleFlowView extends ScrollPane {
     }
     private void openSelected() { var s = table.getSelectionModel().getSelectedItem(); if (s != null && !busy && !stale) openRecord(s.getMaintenanceScheduleId()); }
     private void openRecord(int id) { selectedId = id; createMode = false; completed.setValue(LocalDate.now()); load(); setVvalue(0); }
-    private void load() { load(null); }
+    private void load() { load(savedFeedback); }
     private void load(String success) {
         if (busy) return;
         busy = true; stale = true; selected = null; updateButtons();
         content.getChildren().removeAll(list, details, actions, creation);
         back.setVisible(selectedId != null || createMode); back.setManaged(back.isVisible());
         heading.setText(createMode ? "Create preventive schedule" : selectedId == null ? "Preventive schedules" : "Schedule #" + selectedId);
-        message("Loading schedules…", false);
+        message(success == null ? "Loading schedules…" : success + " Refreshing details…", false);
         if (createMode) {
             content.getChildren().add(creation);
             FxTasks.run(() -> service.getAllAssets().stream().filter(a -> a.getManualLifecycle() != ManualLifecycle.RETIRED).toList(),
@@ -141,7 +144,7 @@ public class PreventiveScheduleFlowView extends ScrollPane {
             details.getChildren().clear(); actions.getChildren().clear(); content.getChildren().add(details);
             int id = selectedId;
             FxTasks.run(() -> service.getPreventiveMaintenanceSchedule(id), loaded -> { selected = loaded; render(loaded); stale = false; message(success == null ? "Schedule details updated." : success, false); },
-                    e -> message(e.getMessage() + " Refresh or return to the list.", true), () -> { busy = false; updateButtons(); });
+                    e -> message((success == null ? e.getMessage() : success + " Details could not be refreshed.") + " Refresh or return to the list.", true), () -> { busy = false; updateButtons(); });
         }
     }
     private void render(PreventiveMaintenanceSchedule s) {
@@ -160,10 +163,10 @@ public class PreventiveScheduleFlowView extends ScrollPane {
     }
     private void write(Callable<PreventiveMaintenanceSchedule> operation, String success, boolean created) {
         if (busy || stale) return;
-        busy = true; updateButtons(); message("Saving…", false);
+        saving = true; savedFeedback = null; busy = true; updateButtons(); message("Saving…", false);
         FxTasks.run(operation, saved -> {
             if (created) { selectedId = saved.getMaintenanceScheduleId(); createMode = false; task.clear(); frequency.clear(); assets.clear(); }
-            busy = false; load(success); setVvalue(0);
-        }, e -> { stale = true; busy = false; updateButtons(); message(e.getMessage() + " Input retained. Refresh before retrying.", true); setVvalue(0); }, () -> {});
+            completed.setValue(LocalDate.now()); saving = false; savedFeedback = success; busy = false; load(success); setVvalue(0);
+        }, e -> { saving = false; stale = true; busy = false; updateButtons(); message(e.getMessage() + " Input retained. Refresh before retrying.", true); setVvalue(0); }, () -> {});
     }
 }

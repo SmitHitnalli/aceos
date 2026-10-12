@@ -18,12 +18,13 @@ public class ComplaintManagementView extends ScrollPane {
     private final ComboBox<ComplaintPriority> priority = new ComboBox<>();
     private final Label feedback = new Label();
     private final Button progress = new Button("View submitted complaint");
-    private boolean busy;
+    private boolean busy, saving;
 
     public ComplaintManagementView(AceOsService service) { this(service, id -> {}); }
 
     public ComplaintManagementView(AceOsService service, IntConsumer openComplaint) {
         this.service = service;
+        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !description.getText().isEmpty() || assets.selected() != null || priority.getValue() != null);
         setId("complaint-report"); setFitToWidth(true);
         VBox content = new VBox(16); content.setPadding(new Insets(24)); content.setMinWidth(0);
         Label title = new Label("Report a complaint"); title.getStyleClass().add("title");
@@ -48,7 +49,7 @@ public class ComplaintManagementView extends ScrollPane {
                 message("Choose an asset, describe the problem and select a priority.", true); return;
             }
             int id = asset.getAssetId(); String text = description.getText(); var selectedPriority = priority.getValue();
-            busy = true; form.setDisable(true); submit.setDisable(true); progress.setDisable(true);
+            busy = true; saving = true; form.setDisable(true); submit.setDisable(true); progress.setDisable(true);
             message("Submitting complaint…", false);
             FxTasks.run(() -> service.submitComplaint(id, text, selectedPriority), result -> {
                 message("Complaint #" + result.getComplaintId() + " submitted. Awaiting administrator review.", false);
@@ -56,7 +57,7 @@ public class ComplaintManagementView extends ScrollPane {
                 progress.setVisible(true); progress.setManaged(true);
                 progress.setOnAction(event -> openComplaint.accept(result.getComplaintId()));
             }, error -> message(error.getMessage() + " Your input is retained; refresh assets if needed and retry.", true),
-                    () -> { busy = false; form.setDisable(false); progress.setDisable(false); submit.setDisable(assets.isEmpty()); });
+                    () -> { saving = false; busy = false; form.setDisable(false); progress.setDisable(false); submit.setDisable(assets.isEmpty()); });
         });
         content.getChildren().addAll(title, help, form, submit, feedback, progress);
         setContent(content); loadAssets();

@@ -40,11 +40,13 @@ public class AccountManagementView extends BorderPane {
     private AccountSummary selected;
     private int ownId;
     private Integer preferredId;
-    private boolean busy, fresh;
+    private boolean busy, fresh, saving;
     private String page = "list";
 
     public AccountManagementView(AceOsService service) {
-        this.service = service; setId("account-management"); getStyleClass().add("dashboard");
+        this.service = service;
+        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !name.getText().isEmpty() || !email.getText().isEmpty() || createRole.getValue() != null && createRole.getValue() != UserRole.REQUESTER || page.equals("detail") && selected != null && newRole.getValue() != selected.role());
+        setId("account-management"); getStyleClass().add("dashboard");
         try {
             var actor = service.signedInUser();
             if (actor.getRole() != UserRole.ADMINISTRATOR) throw new AceOsServiceException("Only administrators can manage accounts.");
@@ -119,7 +121,7 @@ public class AccountManagementView extends BorderPane {
         selected = table.getSelectionModel().getSelectedItem(); preferredId = selected.userId(); newRole.setValue(selected.role());
         page = "detail"; showPage();
     }
-    private void showList() { if (busy) return; page = "list"; showPage(); refresh(); }
+    private void showList() { if (busy || !com.aceos.ui.NavigationGuard.allowLeave(this)) return; name.clear(); email.clear(); createRole.setValue(UserRole.REQUESTER); page = "list"; showPage(); refresh(); }
     private void showPage() {
         if (page.equals("list")) setCenter(list);
         else { scroll.setContent(page.equals("detail") ? detail : form); setCenter(scroll); scroll.setVvalue(0); }
@@ -154,7 +156,7 @@ public class AccountManagementView extends BorderPane {
     private void create() {
         if (busy) return; String n = name.getText(), mail = email.getText(); UserRole role = createRole.getValue();
         write(() -> service.registerUser(n,mail,role), user -> {
-            preferredId = user.getUserId(); name.clear(); email.clear(); search.clear(); state.setValue("ALL");
+            preferredId = user.getUserId(); name.clear(); email.clear(); createRole.setValue(UserRole.REQUESTER); search.clear(); state.setValue("ALL");
             page = "list"; showPage();
         }, "Account created. Open the selected account to issue its temporary credential.", false);
     }
@@ -174,12 +176,12 @@ public class AccountManagementView extends BorderPane {
         if (!canAct() || !confirm(title)) return; write(call, ok -> {}, success, true);
     }
     private <T> void write(Callable<T> call, Consumer<T> success, String message, boolean accountAction) {
-        if (busy) return; busy = true; update(); message("Saving…",false);
+        if (busy) return; busy = true; saving = true; update(); message("Saving…",false);
         boolean[] saved = {false};
         FxTasks.run(call, result -> { saved[0] = true; success.accept(result); }, error -> {
             if (accountAction) fresh = false;
             message(error.getMessage() + (accountAction ? " Refresh accounts before retrying. Your choices are retained." : " Your entries are retained. Correct them or retry."), true);
-        }, () -> { busy = false; update(); if (saved[0]) load(message); });
+        }, () -> { saving = false; busy = false; update(); if (saved[0]) load(message); });
     }
     private void deliver(IssuedCredential credential) {
         TextField secret = new TextField(credential.secret()); secret.setEditable(false); secret.setPrefColumnCount(35);

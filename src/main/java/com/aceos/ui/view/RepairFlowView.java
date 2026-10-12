@@ -40,7 +40,8 @@ public final class RepairFlowView extends ScrollPane {
     private final SearchSelector<User> technicians = new SearchSelector<>("Technician", "repair-technician",
             u -> u.getName() + " · " + u.getEmail() + " · #" + u.getUserId(), User::getUserId);
     private Integer selectedId;
-    private boolean busy;
+    private boolean busy, saving;
+    private String savedFeedback;
 
     public RepairFlowView(AceOsService service, boolean jobs, String filter) {
         this(service, jobs, filter, null);
@@ -48,6 +49,7 @@ public final class RepairFlowView extends ScrollPane {
 
     public RepairFlowView(AceOsService service, boolean jobs, String filter, Integer recordId) {
         this.service = service; this.jobs = jobs;
+        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !completion.getText().isEmpty() || technicians.selected() != null);
         UserRole current;
         try { current = service.signedInUser().getRole(); }
         catch (AceOsServiceException e) { current = null; }
@@ -58,7 +60,8 @@ public final class RepairFlowView extends ScrollPane {
         heading.getStyleClass().add("title"); heading.setWrapText(true);
         refresh.setId("repair-refresh"); refresh.setOnAction(e -> { if (selectedId == null) loadList(); else loadDetail(); });
         back.setId("repair-back"); back.setOnAction(e -> {
-            selectedId = null; completion.clear(); technicians.clear(); showList(); loadList();
+            if (!com.aceos.ui.NavigationGuard.allowLeave(this)) return;
+            savedFeedback = null; selectedId = null; completion.clear(); technicians.clear(); showList(); loadList();
         });
         feedback.setId("repair-feedback"); feedback.setWrapText(true);
         var header = new FlowPane(12, 8, heading, refresh, back);
@@ -150,18 +153,18 @@ public final class RepairFlowView extends ScrollPane {
 
     private void loadDetail() {
         if (busy || selectedId == null) return;
-        setBusy(true); actions.setDisable(true); message("Loading current progress…", false);
+        setBusy(true); actions.setDisable(true); message(savedFeedback == null ? "Loading current progress…" : savedFeedback + " Refreshing progress…", false);
         int id = selectedId;
         FxTasks.run(() -> {
             var snapshot = jobs ? service.getWorkDetail(id) : service.getRepairDetail(id);
             boolean choose = role == UserRole.ADMINISTRATOR && (snapshot.complaint().getStatus() == ComplaintStatus.ACCEPTED
                     || snapshot.work() != null && snapshot.work().getStatus() == WorkOrderStatus.ASSIGNED);
             return new Loaded(snapshot, choose ? service.getActiveTechnicians() : List.of());
-        }, loaded -> { render(loaded); refresh.setText("Refresh"); message("Current progress loaded.", false); },
+        }, loaded -> { render(loaded); refresh.setText("Refresh"); message(savedFeedback == null ? "Current progress loaded." : savedFeedback, false); },
                 error -> {
                     detail.getChildren().clear();
                     detail.getChildren().add(text("Details unavailable. Your unfinished input is retained; retry to reload.", "muted"));
-                    message(error.getMessage() + " Retry to reload.", true); refresh.setText("Retry");
+                    message((savedFeedback == null ? error.getMessage() : savedFeedback + " Progress could not be refreshed.") + " Retry to reload.", true); refresh.setText("Retry");
                 }, () -> setBusy(false));
     }
 
@@ -228,12 +231,12 @@ public final class RepairFlowView extends ScrollPane {
 
     private void mutate(Callable<?> operation) {
         if (busy) return;
-        setBusy(true); actions.setDisable(true); message("Saving…", false);
+        saving = true; savedFeedback = null; setBusy(true); actions.setDisable(true); message("Saving…", false);
         FxTasks.run(operation, result -> {
             completion.clear(); technicians.clear();
-            setBusy(false); loadDetail();
+            saving = false; savedFeedback = "Action saved successfully."; setBusy(false); loadDetail(); setVvalue(0);
         }, error -> {
-            message(error.getMessage() + " Input retained. Refresh current progress before retrying.", true);
+            saving = false; message(error.getMessage() + " Input retained. Refresh current progress before retrying.", true);
             setVvalue(0);
             refresh.setText("Refresh current progress");
             // A stale/failed write must not leave old actions enabled.

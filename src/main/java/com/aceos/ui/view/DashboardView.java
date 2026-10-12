@@ -83,7 +83,7 @@ public class DashboardView extends ScrollPane {
                         card("assignment", "Ready for assignment", "Assign work", "assign"),
                         card("verification", "Awaiting verification", "Verify repairs", "verify"),
                         card("unassignedInspections", "Unassigned inspections", "Assign inspections", "assignments"),
-                        card("overdueInspections", "Overdue inspections", "View inspections", "inspections"),
+                        card("overdueInspections", "Overdue inspections", "View inspections", "overdue-inspections"),
                         card("overdueSchedules", "Overdue schedules", "View overdue schedules", "overdue-schedules"),
                         card("holds", "Open safety holds", "Manage availability", "availability"));
                 content.getChildren().addAll(header, description);
