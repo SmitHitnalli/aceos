@@ -89,6 +89,7 @@ public final class WorkspaceView extends BorderPane {
             add("inspections", "Assigned inspections", () -> new AssetInspectionDirectoryView(service));
             add("complaints", "Linked complaints", () -> new RepairFlowView(service, false, null));
             add("assets", "Assigned assets", () -> new AssetDirectoryView(service));
+            add("schedule-directory", "Assigned asset schedules", () -> new PreventiveMaintenanceDirectoryView(service));
         } else {
             add("review", "Review complaints", () -> new RepairFlowView(service, false, "SUBMITTED"));
             add("assign", "Assign work", () -> new RepairFlowView(service, false, "ACCEPTED"));
@@ -96,6 +97,8 @@ public final class WorkspaceView extends BorderPane {
             add("assignments", "Inspection assignments", () -> new InspectionFlowView(service, "UNASSIGNED", null, false));
             add("availability", "Asset availability", () -> new AssetAvailabilityView(service));
             add("schedules", "Manage schedules", () -> new PreventiveMaintenanceManagementView(service));
+            add("overdue-schedules", "Overdue schedules", () -> new PreventiveScheduleFlowView(service, "OVERDUE", null, false));
+            add("create-schedule", "Create schedule", () -> new PreventiveScheduleFlowView(service, null, null, true));
             add("schedule-inspection", "Schedule inspections", () -> new AssetInspectionManagementView(service));
             add("inspections", "Inspection directory", () -> new AssetInspectionDirectoryView(service));
             add("schedule-directory", "Schedule directory", () -> new PreventiveMaintenanceDirectoryView(service));

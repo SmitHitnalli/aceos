@@ -768,6 +768,136 @@ class UiSmokeTest {
         awaitControl(root.get(), "inspection-refresh"); assertEquals(4,service.writes.get());
     }
 
+    private static final class SchedulePreview extends AceOsService {
+        final com.aceos.model.UserRole role;
+        final com.aceos.model.Asset asset = new com.aceos.model.Asset(11, "AC-101", "Classroom air conditioner", "Cooling", "Room 101", com.aceos.model.AssetStatus.OUT_OF_SERVICE);
+        volatile com.aceos.model.PreventiveMaintenanceSchedule schedule;
+        volatile boolean failRead, failWrite, empty;
+        volatile CountDownLatch gate;
+        final java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+        SchedulePreview(com.aceos.model.UserRole role) {
+            this.role = role;
+            schedule = new com.aceos.model.PreventiveMaintenanceSchedule(81, asset, "Clean filters", 30, java.time.LocalDate.now().minusDays(1), com.aceos.model.MaintenanceScheduleStatus.ACTIVE);
+        }
+        void read() throws com.aceos.service.AceOsServiceException { assertFalse(Platform.isFxApplicationThread()); if (failRead) throw new com.aceos.service.AceOsServiceException("Read failed"); }
+        void write() throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread()); writes.incrementAndGet();
+            if (gate != null) try { gate.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { throw new RuntimeException(e); }
+            if (failWrite) throw new com.aceos.service.AceOsServiceException("Write failed");
+        }
+        @Override public com.aceos.model.User signedInUser() { return new com.aceos.model.User(1, "Example user", "example@aceos.local", role); }
+        @Override public java.util.List<com.aceos.model.PreventiveMaintenanceSchedule> getAllPreventiveMaintenanceSchedules() throws com.aceos.service.AceOsServiceException { read(); return empty ? java.util.List.of() : java.util.List.of(schedule); }
+        @Override public com.aceos.model.PreventiveMaintenanceSchedule getPreventiveMaintenanceSchedule(int id) throws com.aceos.service.AceOsServiceException { read(); assertEquals(81, id); return schedule; }
+        @Override public java.util.List<com.aceos.model.Asset> getAllAssets() throws com.aceos.service.AceOsServiceException {
+            read(); return empty ? java.util.List.of() : java.util.List.of(asset, new com.aceos.model.Asset(12,"RETIRED","Old asset","Cooling","Old room",com.aceos.model.AssetStatus.RETIRED));
+        }
+        @Override public com.aceos.model.PreventiveMaintenanceSchedule createPreventiveMaintenanceSchedule(int id, String task, int days, java.time.LocalDate due) throws com.aceos.service.AceOsServiceException {
+            assertEquals(11,id); write(); schedule = new com.aceos.model.PreventiveMaintenanceSchedule(81,asset,task,days,due,com.aceos.model.MaintenanceScheduleStatus.ACTIVE); return schedule;
+        }
+        @Override public com.aceos.model.PreventiveMaintenanceSchedule pausePreventiveMaintenanceSchedule(int id) throws com.aceos.service.AceOsServiceException { assertEquals(81,id); write(); schedule.pause(); return schedule; }
+        @Override public com.aceos.model.PreventiveMaintenanceSchedule activatePreventiveMaintenanceSchedule(int id) throws com.aceos.service.AceOsServiceException { assertEquals(81,id); write(); schedule.activate(); return schedule; }
+        @Override public com.aceos.model.PreventiveMaintenanceSchedule completePreventiveMaintenanceSchedule(int id, java.time.LocalDate date) throws com.aceos.service.AceOsServiceException { assertEquals(81,id); write(); schedule.recordCompletion(date); return schedule; }
+        @Override public com.aceos.model.DashboardSummary getDashboardSummary() { return new com.aceos.model.DashboardSummary(java.util.Map.of("overdueSchedules", 1), java.util.List.of()); }
+    }
+
+    @Test
+    void scheduleLayoutsExactNavigationCreationAndRoleActions() throws Exception {
+        for (var role : new com.aceos.model.UserRole[] {com.aceos.model.UserRole.ADMINISTRATOR, com.aceos.model.UserRole.TECHNICIAN}) {
+            for (int[] size : new int[][] {{800,520}, {1280,800}}) {
+                var service = new SchedulePreview(role);
+                var root = new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+                fx(() -> { root.set(new com.aceos.ui.WorkspaceView(service, () -> {}, () -> {})); new Scene(root.get(),size[0],size[1]); return null; });
+                awaitControl(root.get(), "dashboard-refresh");
+                fx(() -> { fire(root.get(), role == com.aceos.model.UserRole.ADMINISTRATOR ? "dashboard-action-overdue-schedules" : "dashboard-action-schedule-directory"); return null; });
+                awaitControl(root.get(), "schedule-refresh");
+                fx(() -> {
+                    assertEquals(role == com.aceos.model.UserRole.ADMINISTRATOR ? "OVERDUE" : "ALL", ((javafx.scene.control.ComboBox<?>)root.get().lookup("#schedule-filter")).getValue());
+                    var table = (javafx.scene.control.TableView<?>)root.get().lookup("#schedule-table"); assertEquals(1,table.getItems().size()); table.getSelectionModel().selectFirst();
+                    snapshot(root.get(),size,"schedule-list-" + role,true);
+                    table.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,"","",javafx.scene.input.KeyCode.ENTER,false,false,false,false)); return null;
+                });
+                awaitControl(root.get(), "schedule-refresh");
+                fx(() -> {
+                    assertTrue(((javafx.scene.layout.VBox)root.get().lookup("#schedule-detail")).getChildren().stream().anyMatch(n -> n instanceof javafx.scene.control.Label l && l.getText().contains("Clean filters")));
+                    snapshot(root.get(),size,"schedule-detail-" + role,true);
+                    if (role == com.aceos.model.UserRole.TECHNICIAN) { assertNull(root.get().lookup("#schedule-toggle")); assertNull(root.get().lookup("#schedule-complete")); }
+                    else {
+                        var flow = (PreventiveScheduleFlowView)root.get().getCenter(); flow.setVvalue(1); flow.layout();
+                        var bounds = flow.lookup("#schedule-complete").localToScene(flow.lookup("#schedule-complete").getBoundsInLocal()); assertTrue(bounds.getMinY() >= 0 && bounds.getMaxY() <= size[1]);
+                        snapshot(root.get(),size,"schedule-actions",true); fire(root.get(),"schedule-toggle");
+                    }
+                    return null;
+                });
+                if (role == com.aceos.model.UserRole.ADMINISTRATOR) {
+                    awaitControl(root.get(), "schedule-refresh"); fx(() -> { assertNull(root.get().lookup("#schedule-complete")); fire(root.get(),"schedule-toggle"); return null; });
+                    awaitControl(root.get(), "schedule-refresh"); fx(() -> { fire(root.get(),"schedule-complete"); return null; });
+                    awaitControl(root.get(), "schedule-refresh"); assertEquals(java.time.LocalDate.now().plusDays(30),service.schedule.getNextDueDate());
+                    fx(() -> { root.get().navigate("create-schedule"); return null; }); awaitControl(root.get(),"schedule-refresh");
+                    fx(() -> {
+                        var choices = (javafx.scene.control.ComboBox<?>)root.get().lookup("#schedule-asset-choice"); assertEquals(1,choices.getItems().size()); choices.getSelectionModel().selectFirst();
+                        ((javafx.scene.control.TextField)root.get().lookup("#schedule-task")).setText("Inspect and clean filters"); ((javafx.scene.control.TextField)root.get().lookup("#schedule-frequency")).setText("60");
+                        snapshot(root.get(),size,"schedule-create",true);
+                        var flow = (PreventiveScheduleFlowView)root.get().getCenter(); flow.setVvalue(1); flow.layout();
+                        var bounds = flow.lookup("#schedule-create").localToScene(flow.lookup("#schedule-create").getBoundsInLocal()); assertTrue(bounds.getMinY() >= 0 && bounds.getMaxY() <= size[1]);
+                        snapshot(root.get(),size,"schedule-create-action",true); fire(root.get(),"schedule-create"); fire(root.get(),"schedule-create"); return null;
+                    });
+                    awaitControl(root.get(),"schedule-refresh"); assertEquals(4,service.writes.get()); assertEquals(60,service.schedule.getFrequencyDays());
+                }
+            }
+        }
+        var requester = new SchedulePreview(com.aceos.model.UserRole.REQUESTER);
+        fx(() -> { var w = new com.aceos.ui.WorkspaceView(requester,() -> {},() -> {}); assertThrows(IllegalArgumentException.class, () -> w.navigate("schedule-directory")); var denied = new PreventiveScheduleFlowView(requester,null,null,true); assertNull(denied.lookup("#schedule-create")); return null; });
+    }
+
+    @Test
+    void scheduleCreationFailureRetainsChoicesAndReadRecovery() throws Exception {
+        var service = new SchedulePreview(com.aceos.model.UserRole.ADMINISTRATOR);
+        var root = new java.util.concurrent.atomic.AtomicReference<PreventiveScheduleFlowView>();
+        fx(() -> { root.set(new PreventiveScheduleFlowView(service,null,null,true)); new Scene(root.get(),800,520); return null; }); awaitControl(root.get(),"schedule-refresh");
+        service.failWrite = true; service.gate = new CountDownLatch(1);
+        fx(() -> {
+            var search = (javafx.scene.control.TextField)root.get().lookup("#schedule-asset-search"); var choices = (javafx.scene.control.ComboBox<?>)root.get().lookup("#schedule-asset-choice");
+            search.setText("missing"); assertTrue(choices.getItems().isEmpty()); search.setText("Room 101"); choices.getSelectionModel().selectFirst();
+            ((javafx.scene.control.TextField)root.get().lookup("#schedule-task")).setText("Retained task"); ((javafx.scene.control.TextField)root.get().lookup("#schedule-frequency")).setText("45");
+            fire(root.get(),"schedule-create"); fire(root.get(),"schedule-create"); fire(root.get(),"schedule-refresh"); return null;
+        }); service.gate.countDown(); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> {
+            assertEquals(1,service.writes.get()); assertTrue(root.get().lookup("#schedule-create").isDisabled());
+            assertEquals("Retained task",((javafx.scene.control.TextField)root.get().lookup("#schedule-task")).getText()); assertEquals("45",((javafx.scene.control.TextField)root.get().lookup("#schedule-frequency")).getText());
+            assertNotNull(((javafx.scene.control.ComboBox<?>)root.get().lookup("#schedule-asset-choice")).getValue());
+            service.failWrite = false; service.gate = null; fire(root.get(),"schedule-refresh"); return null;
+        }); awaitControl(root.get(),"schedule-refresh"); fx(() -> { fire(root.get(),"schedule-create"); return null; }); awaitControl(root.get(),"schedule-refresh"); assertEquals(2,service.writes.get());
+        service.failRead = true; fx(() -> { fire(root.get(),"schedule-back"); return null; }); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> { assertTrue(((javafx.scene.control.TableView<?>)root.get().lookup("#schedule-table")).getItems().isEmpty()); assertTrue(root.get().lookup("#schedule-open").isDisabled()); service.failRead = false; service.empty = true; fire(root.get(),"schedule-refresh"); return null; }); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> { assertTrue(((javafx.scene.control.TableView<?>)root.get().lookup("#schedule-table")).getItems().isEmpty()); service.empty = false; fire(root.get(),"schedule-refresh"); return null; }); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> {
+            var search = (javafx.scene.control.TextField)root.get().lookup("#schedule-search"); var table = (javafx.scene.control.TableView<?>)root.get().lookup("#schedule-table");
+            search.setText("missing"); assertTrue(table.getItems().isEmpty()); search.setText("Room 101"); assertEquals(1,table.getItems().size());
+            ((javafx.scene.control.ComboBox<String>)root.get().lookup("#schedule-filter")).setValue("PAUSED"); assertTrue(table.getItems().isEmpty());
+            ((javafx.scene.control.ComboBox<String>)root.get().lookup("#schedule-filter")).setValue("UPCOMING"); assertEquals(1,table.getItems().size()); return null;
+        });
+        service.empty = true; fx(() -> { root.set(new PreventiveScheduleFlowView(service,null,null,true)); new Scene(root.get(),800,520); return null; }); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> { assertTrue(root.get().lookup("#schedule-create").isDisabled()); return null; });
+    }
+
+    @Test
+    void scheduleLifecycleFailuresBlockStaleActionsAndRetainCompletionDate() throws Exception {
+        var service = new SchedulePreview(com.aceos.model.UserRole.ADMINISTRATOR); var root = new java.util.concurrent.atomic.AtomicReference<PreventiveScheduleFlowView>();
+        fx(() -> { root.set(new PreventiveScheduleFlowView(service,null,81,false)); new Scene(root.get(),800,520); return null; }); awaitControl(root.get(),"schedule-refresh");
+        var date = java.time.LocalDate.now().minusDays(2);
+        service.failWrite = true; service.gate = new CountDownLatch(1);
+        fx(() -> { ((javafx.scene.control.DatePicker)root.get().lookup("#schedule-completed-date")).setValue(date); fire(root.get(),"schedule-complete"); fire(root.get(),"schedule-complete"); fire(root.get(),"schedule-toggle"); return null; }); service.gate.countDown(); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> { assertEquals(1,service.writes.get()); assertTrue(root.get().lookup("#schedule-complete").isDisabled()); assertTrue(root.get().lookup("#schedule-toggle").isDisabled()); assertEquals(date,((javafx.scene.control.DatePicker)root.get().lookup("#schedule-completed-date")).getValue()); service.failWrite = false; service.gate = null; fire(root.get(),"schedule-refresh"); return null; }); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> { assertEquals(date,((javafx.scene.control.DatePicker)root.get().lookup("#schedule-completed-date")).getValue()); fire(root.get(),"schedule-complete"); return null; }); awaitControl(root.get(),"schedule-refresh"); assertEquals(date.plusDays(30),service.schedule.getNextDueDate());
+        // A concurrent pause is revealed by refresh after a failed action.
+        service.failWrite = true; fx(() -> { fire(root.get(),"schedule-toggle"); return null; }); awaitControl(root.get(),"schedule-refresh"); service.schedule.pause(); service.failWrite = false;
+        fx(() -> { assertTrue(root.get().lookup("#schedule-toggle").isDisabled()); fire(root.get(),"schedule-refresh"); return null; }); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> { assertNull(root.get().lookup("#schedule-complete")); assertEquals("Activate schedule",((javafx.scene.control.Button)root.get().lookup("#schedule-toggle")).getText()); service.failWrite = true; fire(root.get(),"schedule-toggle"); return null; }); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> { assertTrue(root.get().lookup("#schedule-toggle").isDisabled()); service.failWrite = false; fire(root.get(),"schedule-refresh"); return null; }); awaitControl(root.get(),"schedule-refresh");
+        fx(() -> { fire(root.get(),"schedule-toggle"); return null; }); awaitControl(root.get(),"schedule-refresh"); assertEquals(com.aceos.model.MaintenanceScheduleStatus.ACTIVE,service.schedule.getStatus());
+        service.failRead = true; fx(() -> { fire(root.get(),"schedule-refresh"); return null; }); awaitControl(root.get(),"schedule-refresh"); fx(() -> { assertNull(root.get().lookup("#schedule-complete")); assertNull(root.get().lookup("#schedule-toggle")); return null; });
+    }
+
     private void snapshot(Region root, int[] size, String name) throws Exception {
         snapshot(root, size, name, false);
     }

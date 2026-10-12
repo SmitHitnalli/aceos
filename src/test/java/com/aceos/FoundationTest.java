@@ -124,6 +124,61 @@ class FoundationTest {
     }
 
     @Test
+    void connectedSchedulesRespectAssignedAssetsRolesAndSessions() throws Exception {
+        var a = asset("SCHEDULE-OWN"); var foreign = asset("SCHEDULE-OTHER");
+        var own = admin.createPreventiveMaintenanceSchedule(a.getAssetId(), "Clean filters", 30, LocalDate.now());
+        var other = admin.createPreventiveMaintenanceSchedule(foreign.getAssetId(), "Other task", 7, LocalDate.now());
+        assertTrue(technician.getAllPreventiveMaintenanceSchedules().isEmpty());
+        assigned(a);
+        var i = admin.scheduleAssetInspection(foreign.getAssetId(), "Other assignment", LocalDate.now()); admin.assignInspection(i.getInspectionId(), 6);
+        assertEquals(List.of(own.getMaintenanceScheduleId()), technician.getAllPreventiveMaintenanceSchedules().stream().map(PreventiveMaintenanceSchedule::getMaintenanceScheduleId).toList());
+        assertEquals(own.getMaintenanceScheduleId(), technician.getPreventiveMaintenanceSchedule(own.getMaintenanceScheduleId()).getMaintenanceScheduleId());
+        denied(() -> technician.getPreventiveMaintenanceSchedule(other.getMaintenanceScheduleId()));
+        assertEquals(other.getMaintenanceScheduleId(), otherTechnician.getPreventiveMaintenanceSchedule(other.getMaintenanceScheduleId()).getMaintenanceScheduleId());
+        assertTrue(requester.getAllPreventiveMaintenanceSchedules().isEmpty()); denied(() -> requester.getPreventiveMaintenanceSchedule(own.getMaintenanceScheduleId()));
+        for (var actor : List.of(requester, technician)) {
+            denied(() -> actor.createPreventiveMaintenanceSchedule(a.getAssetId(), "Forbidden", 7, LocalDate.now()));
+            denied(() -> actor.pausePreventiveMaintenanceSchedule(own.getMaintenanceScheduleId()));
+            denied(() -> actor.activatePreventiveMaintenanceSchedule(own.getMaintenanceScheduleId()));
+            denied(() -> actor.completePreventiveMaintenanceSchedule(own.getMaintenanceScheduleId(), LocalDate.now()));
+        }
+        admin.assignInspection(i.getInspectionId(), 5);
+        denied(() -> otherTechnician.getPreventiveMaintenanceSchedule(other.getMaintenanceScheduleId()));
+        assertEquals(2, technician.getAllPreventiveMaintenanceSchedules().size());
+        denied(() -> new AceOsService().getAllPreventiveMaintenanceSchedules());
+        technician.signOut(); denied(() -> technician.getPreventiveMaintenanceSchedule(own.getMaintenanceScheduleId()));
+    }
+
+    @Test
+    void connectedScheduleDatesRecurrenceStateAndAvailabilityRemainGuarded() throws Exception {
+        var a = asset("RECURRENCE");
+        denied(() -> admin.createPreventiveMaintenanceSchedule(a.getAssetId(), "Task", 0, LocalDate.now()));
+        denied(() -> admin.createPreventiveMaintenanceSchedule(a.getAssetId(), " ", 30, LocalDate.now()));
+        denied(() -> admin.createPreventiveMaintenanceSchedule(a.getAssetId(), "Task", 30, LocalDate.now().minusDays(1)));
+        denied(() -> admin.createPreventiveMaintenanceSchedule(a.getAssetId(), "Task", 30, null));
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.OUT_OF_SERVICE, "Manual hold");
+        var s = admin.createPreventiveMaintenanceSchedule(a.getAssetId(), "Clean filters", 30, LocalDate.now()); int id = s.getMaintenanceScheduleId();
+        denied(() -> admin.completePreventiveMaintenanceSchedule(id, LocalDate.now().plusDays(1)));
+        denied(() -> admin.completePreventiveMaintenanceSchedule(id, null));
+        assertEquals(LocalDate.now(), admin.getPreventiveMaintenanceSchedule(id).getNextDueDate());
+        assertEquals(LocalDate.now().plusDays(30), admin.completePreventiveMaintenanceSchedule(id, LocalDate.now()).getNextDueDate());
+        assertEquals(MaintenanceScheduleStatus.ACTIVE, admin.getPreventiveMaintenanceSchedule(id).getStatus());
+        assertEquals(AssetStatus.OUT_OF_SERVICE, admin.getAsset(a.getAssetId()).getStatus());
+        admin.pausePreventiveMaintenanceSchedule(id); denied(() -> admin.pausePreventiveMaintenanceSchedule(id));
+        denied(() -> admin.completePreventiveMaintenanceSchedule(id, LocalDate.now()));
+        assertEquals(LocalDate.now().plusDays(30), admin.activatePreventiveMaintenanceSchedule(id).getNextDueDate());
+        denied(() -> admin.activatePreventiveMaintenanceSchedule(id));
+        // Preserve the existing completion-date rule, including a recorded past completion.
+        assertEquals(LocalDate.now().plusDays(28), admin.completePreventiveMaintenanceSchedule(id, LocalDate.now().minusDays(2)).getNextDueDate());
+        denied(() -> admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.OUT_OF_SERVICE, ManualLifecycle.RETIRED, "Active recurrence"));
+        admin.pausePreventiveMaintenanceSchedule(id);
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.OUT_OF_SERVICE, ManualLifecycle.RETIRED, "Finished service");
+        denied(() -> admin.activatePreventiveMaintenanceSchedule(id)); denied(() -> admin.completePreventiveMaintenanceSchedule(id, LocalDate.now()));
+        denied(() -> admin.createPreventiveMaintenanceSchedule(a.getAssetId(), "New task", 30, LocalDate.now()));
+        assertEquals(MaintenanceScheduleStatus.PAUSED, admin.getPreventiveMaintenanceSchedule(id).getStatus());
+    }
+
+    @Test
     void assetProfilesPreserveHistoryOwnershipAndRetiredLookupRules() throws Exception {
         Asset a = asset("PROFILE"); var mine = assigned(a);
         technician.startWorkOrder(mine.getWorkOrderId()); technician.completeWorkOrder(mine.getWorkOrderId(), "Own completion");

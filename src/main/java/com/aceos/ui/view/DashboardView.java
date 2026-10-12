@@ -75,7 +75,7 @@ public class DashboardView extends ScrollPane {
                         card("completed", "Awaiting verification", "View jobs", "jobs"),
                         card("inspections", "Scheduled inspections", "Complete inspection", "complete-inspection"),
                         card("overdueInspections", "Overdue inspections", "View inspections", "inspections"));
-                content.getChildren().addAll(header, description);
+                content.getChildren().addAll(header, description, action("Assigned asset schedules", "schedule-directory", false));
             }
             case ADMINISTRATOR -> {
                 queues.getChildren().addAll(
@@ -84,7 +84,7 @@ public class DashboardView extends ScrollPane {
                         card("verification", "Awaiting verification", "Verify repairs", "verify"),
                         card("unassignedInspections", "Unassigned inspections", "Assign inspections", "assignments"),
                         card("overdueInspections", "Overdue inspections", "View inspections", "inspections"),
-                        card("overdueSchedules", "Overdue schedules", "Manage schedules", "schedules"),
+                        card("overdueSchedules", "Overdue schedules", "View overdue schedules", "overdue-schedules"),
                         card("holds", "Open safety holds", "Manage availability", "availability"));
                 content.getChildren().addAll(header, description);
             }
@@ -97,6 +97,7 @@ public class DashboardView extends ScrollPane {
                     new FlowPane(8, 8, action("Accounts", "accounts", false),
                             action("Register asset", "register", false),
                             action("Schedule inspection", "schedule-inspection", false),
+                            action("Create preventive schedule", "create-schedule", false),
                             action("Asset directory", "assets", false)));
         }
         setContent(content);
