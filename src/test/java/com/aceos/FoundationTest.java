@@ -390,6 +390,7 @@ class FoundationTest {
 
     @Test
     void migrationRerunPreservesOperationalLinks() throws Exception {
+        assertEquals(Migrations.checksum("SELECT 1;\n".getBytes(java.nio.charset.StandardCharsets.UTF_8)),Migrations.checksum("SELECT 1;\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         Asset a = asset("MIGRATION");
         WorkOrder w = assigned(a);
         AssetInspection i =
@@ -434,11 +435,7 @@ class FoundationTest {
                         Migrations.class
                                 .getResourceAsStream("/database/V001__accounts.sql")
                                 .readAllBytes();
-                String checksum =
-                        java.util.HexFormat.of()
-                                .formatHex(
-                                        java.security.MessageDigest.getInstance("SHA-256")
-                                                .digest(bytes));
+                String checksum = Migrations.checksum(bytes);
                 try (PreparedStatement p =
                         c.prepareStatement(
                                 "UPDATE schema_migrations SET checksum=? WHERE version=1")) {

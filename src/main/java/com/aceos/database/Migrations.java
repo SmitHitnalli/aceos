@@ -48,9 +48,7 @@ public final class Migrations {
                     if (in == null) throw new SQLException("Missing migration resource");
                     bytes = in.readAllBytes();
                 }
-                String checksum =
-                        HexFormat.of()
-                                .formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+                String checksum = checksum(bytes);
                 try (ResultSet r =
                         s.executeQuery(
                                 "SELECT checksum,status FROM schema_migrations WHERE version=1")) {
@@ -109,14 +107,10 @@ public final class Migrations {
             if (!r.next() || r.getInt(1) != 1 || !"COMPLETE".equals(r.getString(2)))
                 throw new SQLException("Run the reviewed foundation migration before signing in");
             try (var in = Migrations.class.getResourceAsStream("/database/V001__accounts.sql")) {
-                String checksum =
-                        HexFormat.of()
-                                .formatHex(
-                                        MessageDigest.getInstance("SHA-256")
-                                                .digest(in.readAllBytes()));
+                String checksum = checksum(in.readAllBytes());
                 if (!checksum.equals(r.getString(3)) || r.next())
                     throw new SQLException("Incompatible schema migration version/checksum");
-            } catch (java.io.IOException | java.security.NoSuchAlgorithmException e) {
+            } catch (java.io.IOException e) {
                 throw new SQLException("Migration verification failed", e);
             }
         }
@@ -124,5 +118,11 @@ public final class Migrations {
             s.executeQuery("SELECT auth_version FROM user_accounts LIMIT 0").close();
             s.executeQuery("SELECT assigned_to_user_id FROM asset_inspections LIMIT 0").close();
         }
+    }
+    /** Git checkouts may use CRLF on Windows; line endings must not change migration identity. */
+    public static String checksum(byte[] bytes) throws SQLException {
+        byte[] canonical = new String(bytes, StandardCharsets.UTF_8).replace("\r\n", "\n").replace("\r", "\n").getBytes(StandardCharsets.UTF_8);
+        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonical)); }
+        catch(java.security.NoSuchAlgorithmException e) { throw new SQLException("SHA-256 unavailable", e); }
     }
 }
