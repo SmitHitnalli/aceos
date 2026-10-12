@@ -49,7 +49,7 @@ mvn verify
 
 Password/session unit tests run without MySQL. Database acceptance checks need `ACEOS_DB_URL` naming **aceos_next_test**, the restricted runtime credentials and `ACEOS_TEST_OPERATOR_USER` / `ACEOS_TEST_OPERATOR_PASSWORD` for disposable fixtures. They refuse development/original database URLs. Set `ACEOS_UI_TEST=true` to include JavaFX login/password snapshots and login failure/input-recovery checks. See `target/surefire-reports` and `target/ui-checks` for results.
 
-Legacy standalone `*Test` main methods are retired on this branch to prevent unauthenticated mutations. The frozen v1.0.0 tag retains its original executable checks and setup instructions.
+Obsolete standalone verification classes have been removed from application source; current automated tests are under `src/test/java`. The frozen v1.0.0 tag retains its original executable checks and setup instructions.
 
 ## Baseline and limits
 

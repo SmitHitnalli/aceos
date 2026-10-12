@@ -4,13 +4,13 @@ F1 is implemented on `codex/role-based-foundation`. The published release remain
 
 ## Accounts and authentication
 
-Administrators create accounts. There is no public signup or privileged role self-selection. Email lookup trims/lowercases with `Locale.ROOT`; passwords are never trimmed. Passwords are 15–128 Unicode characters, with paste/passphrases supported. Argon2id uses unique 16-byte salts, 19 MiB memory, 2 iterations and parallelism 1 through Bouncy Castle 1.86. Encoded hashes retain algorithm/parameters; there are no shared/default passwords. See [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
+Administrators create accounts; there is no public signup. Email lookup is trimmed/lowercased; passwords are not trimmed. Passwords accept 15–128 Unicode characters and use individually salted Argon2id (19 MiB, 2 iterations, parallelism 1) through Bouncy Castle 1.86. See [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
 
-New/migrated accounts are `PENDING_ACTIVATION`. An administrator issues a random 24-hour temporary credential, displayed once for private manual delivery. It permits only password change/logout. Password replacement consumes the credential and sets `ACTIVE`. Reset invalidates sessions immediately and requires the same change flow. Forgotten passwords are handled by an administrator after identity verification outside the app; no email service is implied.
+New/migrated accounts are PENDING_ACTIVATION. Administrators issue 24-hour temporary credentials, shown once for private delivery. First login permits only password replacement/logout. Replacement consumes the credential and activates the account. Reset invalidates sessions and repeats this flow; forgotten-password identity checks happen outside the app.
 
-Five failed logins within 15 minutes impose a persistent 15-minute cooldown. Login failures do not disclose account existence. Administrators can unlock accounts. Logout revokes the in-memory session; 30 minutes without service activity expires it. Password changes, resets, account disabling and role changes invalidate other sessions through an authentication version. There is no remember-me.
+Five failed logins within 15 minutes impose a persistent 15-minute cooldown; administrators can unlock accounts. Sessions expire after 30 idle minutes. Logout, password/reset, role changes and deactivation invalidate sessions. No remember-me or shared/default passwords.
 
-Deactivate instead of deleting; history is retained. Outstanding unverified work and scheduled inspections block deactivation/role changes until resolved/reassigned. Only ASSIGNED jobs and SCHEDULED inspections can be reassigned in F1. Self-deactivation/self role change and removing the last active administrator are rejected. Historical work and inspection results remain readable after a role change.
+Deactivate/reactivate instead of deleting. Outstanding unverified jobs or scheduled inspections block technician deactivation/role changes. F1 permits reassignment only before work starts or inspection completes. Self-deactivation/self role changes and removing the last active administrator are rejected. Historical records survive later role changes.
 
 ## Permissions
 
@@ -66,7 +66,7 @@ Never commit environment files, credentials, dumps or temporary secrets. `.local
 
 Do not migrate the valuable original database in place. Taking/migrating a copy is a separate approved action. Before doing so: back up, prove restoration into a fresh isolated schema, compare operational row counts/IDs/links, inspect normalized-email collisions and invalid references, then migrate the copy. Keep the v1 executable with its original schema; do not run it blindly against migrated data. There is no destructive down migration.
 
-The local F1 check restored a development backup into a disposable restore schema and confirmed its user count/account state. It did not copy or migrate the valuable v1 database. Legacy executable `*Test` entry points are retired to prevent accidental unauthenticated mutations; `Main` launches the authenticated JavaFX application.
+The local F1 check restored a development backup into a disposable restore schema and confirmed its user count/account state. It did not copy or migrate the valuable v1 database. Obsolete executable verification classes have been removed from application source; current tests live under `src/test/java`. `Main` launches the authenticated JavaFX application.
 
 ## Verification
 
@@ -81,12 +81,10 @@ mvn verify
 
 Unit checks run without a database. Integration checks require test environment variables and refuse a dev/original database. Fixtures deliberately clear/reseed only the disposable test schema. UI checks need a local graphical JavaFX runtime. Reports are in `target/surefire-reports`; snapshots are in `target/ui-checks`.
 
-Coverage includes forced activation/reset/expiry, hashed credentials, duplicate email, cooldown, role/ownership/anonymous denials, scoped lists/details/totals, inspection assignment, history projection, role-change history, stale sessions, operator isolation/recovery, reassignment/deactivation safeguards, concurrent last-admin removal, concurrent duplicate completion, migration rerun/checksum/partial-failure detection, backup restore and login input recovery. JavaFX snapshots verify login/password fields at 800×520 and 1280×800. Toolkit/module/deprecated-Unsafe warnings may appear with JavaFX 24; they are distinct from compiler/test failures.
+The checks cover accounts/sessions, role ownership, workflow transactions, concurrency, migrations and operator isolation. JavaFX checks capture login/password fields at 800×520 and 1280×800 and test input recovery. JavaFX 24 may emit non-failing toolkit/deprecated-Unsafe warnings.
 
-Remaining human checks: private administrator bootstrap and sign-in on the development schema; keyboard-only login/account/assignment navigation; account credential delivery/reset while another desktop window is open; screen-reader behaviour and visual review on the actual display. Automated service checks cover session invalidation, but these human checks have not been claimed as completed.
+Human checks remaining: private development administrator bootstrap/sign-in, keyboard/screen-reader navigation, credential delivery and reset feedback across live windows.
 
-## Approved visual direction and next chunk
+## Next chunk
 
-Segoe UI; navy #14263D navigation, blue #1D4ED8 primary actions, #F4F7FB canvas, white surfaces, #172B45 body text, #52647A secondary text and #D5DFEB borders. Spacing follows a 4/8px grid with 8px controls/12px panels. Login/password/account additions use this direction. Existing operational screens remain recognizable until the reviewed Phase 2/3 refresh. F1 introduces no decorative motion; reduced-motion behaviour will be part of that refresh.
-
-F2 proposal: separate manual asset lifecycle from availability derived across **all** started unverified repairs and safety holds. Verify one repair without restoring an asset prematurely; introduce explicit failed-inspection hold/release rules and a reviewed legacy-status mapping. F1 intentionally retains the conservative v1 transitions. F2 implementation requires the next chunk's go-ahead.
+The approved Segoe UI/navy-blue/light direction is used on the F1 additions. Full shell/dashboard and connected-screen refresh remain Phase 2/3. F1 retains existing asset-status rules; [F2 availability and safety holds](f2-proposal.md) requires its own go-ahead.
