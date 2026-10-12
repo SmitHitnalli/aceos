@@ -127,6 +127,11 @@ public class AceOsApplication extends Application {
                     () -> new com.aceos.ui.view.AccountManagementView(service));
             addNavigation(navigation, "User Directory", () -> new UserDirectoryView(service));
             addNavigation(navigation, "Register Assets", () -> new AssetManagementView(service));
+            addNavigation(navigation, "Asset Availability", () -> {
+                ScrollPane controls = new ScrollPane(new com.aceos.ui.view.AssetAvailabilityView(service));
+                controls.setFitToWidth(true);
+                return controls;
+            });
             addNavigation(navigation, "Review Complaints", () -> new ComplaintReviewView(service));
             addNavigation(navigation, "Assign Work", () -> new WorkOrderManagementView(service));
             addNavigation(

@@ -1,7 +1,6 @@
 package com.aceos.repository;
 
 import com.aceos.database.DatabaseConnection;
-import com.aceos.model.AssetStatus;
 import com.aceos.model.ComplaintStatus;
 import com.aceos.model.MaintenanceRecord;
 import com.aceos.model.WorkOrder;
@@ -48,6 +47,7 @@ public class MaintenanceWorkflowRepository {
                                         maintenanceRecord
                                 );
 
+                AvailabilityRepository.recalculate(workOrder.getComplaint().getAsset().getAssetId());
                 connection.commit();
 
                 return savedMaintenanceRecord;
@@ -98,17 +98,6 @@ public class MaintenanceWorkflowRepository {
             throw new IllegalArgumentException(
                     "The in-progress work order requires "
                             + "a start time"
-            );
-        }
-
-        if (workOrder
-                .getComplaint()
-                .getAsset()
-                .getStatus()
-                != AssetStatus.UNDER_MAINTENANCE) {
-            throw new IllegalArgumentException(
-                    "The work-order asset must be "
-                            + "under maintenance"
             );
         }
 

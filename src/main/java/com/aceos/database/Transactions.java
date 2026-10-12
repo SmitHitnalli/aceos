@@ -18,6 +18,9 @@ public final class Transactions implements AutoCloseable {
     public Transactions(Connection connection) throws SQLException {
         if (CURRENT.get() != null) throw new SQLException("Nested service transaction");
         owner = connection;
+        // Schema reads precede the security gate. A repeatable-read snapshot taken before
+        // waiting on that gate would hide newly committed holds/jobs from later reads.
+        owner.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
         owner.setAutoCommit(false);
         Connection borrowed =
                 (Connection)

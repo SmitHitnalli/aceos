@@ -85,7 +85,8 @@ public class PreventiveMaintenanceScheduleRepository {
                     a.name AS asset_name,
                     a.category,
                     a.location,
-                    a.status AS asset_status
+                    a.status AS asset_status,
+                    a.manual_lifecycle
                 FROM preventive_maintenance_schedules pms
                 INNER JOIN assets a
                     ON a.asset_id = pms.asset_id
@@ -124,7 +125,8 @@ public class PreventiveMaintenanceScheduleRepository {
                     a.name AS asset_name,
                     a.category,
                     a.location,
-                    a.status AS asset_status
+                    a.status AS asset_status,
+                    a.manual_lifecycle
                 FROM preventive_maintenance_schedules pms
                 INNER JOIN assets a
                     ON a.asset_id = pms.asset_id
@@ -199,7 +201,8 @@ public class PreventiveMaintenanceScheduleRepository {
                         resultSet.getString("asset_name"),
                         resultSet.getString("category"),
                         resultSet.getString("location"),
-                        AssetStatus.valueOf(resultSet.getString("asset_status")));
+                        AssetStatus.valueOf(resultSet.getString("asset_status")),
+                        com.aceos.model.ManualLifecycle.valueOf(resultSet.getString("manual_lifecycle")));
 
         return new PreventiveMaintenanceSchedule(
                 resultSet.getInt("maintenance_schedule_id"),

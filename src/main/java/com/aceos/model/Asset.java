@@ -8,29 +8,26 @@ public class Asset {
     private String category;
     private String location;
     private AssetStatus status;
+    private ManualLifecycle manualLifecycle;
 
-    public Asset(
-            String assetCode,
-            String name,
-            String category,
-            String location,
-            AssetStatus status) {
+    public Asset(String assetCode, String name, String category, String location, AssetStatus status) {
         this(0, assetCode, name, category, location, status);
     }
 
-    public Asset(
-            int assetId,
-            String assetCode,
-            String name,
-            String category,
-            String location,
-            AssetStatus status) {
+    public Asset(int assetId, String assetCode, String name, String category, String location, AssetStatus status) {
+        this(assetId, assetCode, name, category, location, status,
+                status == AssetStatus.UNDER_MAINTENANCE ? ManualLifecycle.ACTIVE : ManualLifecycle.valueOf(status.name()));
+    }
+
+    public Asset(int assetId, String assetCode, String name, String category, String location,
+            AssetStatus status, ManualLifecycle manualLifecycle) {
         this.assetId = assetId;
         this.assetCode = assetCode;
         this.name = name;
         this.category = category;
         this.location = location;
         this.status = status;
+        this.manualLifecycle = manualLifecycle;
     }
 
     public int getAssetId() {
@@ -75,6 +72,10 @@ public class Asset {
 
     public AssetStatus getStatus() {
         return status;
+    }
+
+    public ManualLifecycle getManualLifecycle() {
+        return manualLifecycle;
     }
 
     public void setStatus(AssetStatus status) {

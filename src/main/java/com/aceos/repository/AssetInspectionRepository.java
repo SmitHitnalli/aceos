@@ -86,6 +86,7 @@ public class AssetInspectionRepository {
                     a.category,
                     a.location,
                     a.status AS asset_status,
+                    a.manual_lifecycle,
 
                     u.user_id AS inspector_user_id,
                     u.name AS inspector_name,
@@ -132,6 +133,7 @@ public class AssetInspectionRepository {
                     a.category,
                     a.location,
                     a.status AS asset_status,
+                    a.manual_lifecycle,
 
                     u.user_id AS inspector_user_id,
                     u.name AS inspector_name,
@@ -174,7 +176,8 @@ public class AssetInspectionRepository {
                 SET status = ?,
                     inspected_by_user_id = ?,
                     notes = ?,
-                    completed_date = ?
+                    completed_date = ?,
+                    completed_at = CURRENT_TIMESTAMP(6)
                 WHERE inspection_id = ?
                   AND status = 'SCHEDULED'
                 """;
@@ -204,7 +207,8 @@ public class AssetInspectionRepository {
                         resultSet.getString("asset_name"),
                         resultSet.getString("category"),
                         resultSet.getString("location"),
-                        AssetStatus.valueOf(resultSet.getString("asset_status")));
+                        AssetStatus.valueOf(resultSet.getString("asset_status")),
+                        com.aceos.model.ManualLifecycle.valueOf(resultSet.getString("manual_lifecycle")));
 
         User inspectedBy = null;
         int inspectorId = resultSet.getInt("inspector_user_id");

@@ -1,6 +1,6 @@
-# F1 local foundation
+# F1/F2 local foundation
 
-F1 is implemented on `codex/role-based-foundation`. The published release remains v1.0.0; the next version number is undecided. Java 24, JavaFX 24.0.2, JDBC and MySQL remain the architecture. Full dashboard/shell refresh is Phase 2; connected screens are Phase 3; deployment is last.
+F1/F2 are implemented on `codex/role-based-foundation`. The published release remains v1.0.0; the next version number is undecided. Java 24, JavaFX 24.0.2, JDBC and MySQL remain the architecture. Full dashboard/shell refresh is Phase 2; connected screens are Phase 3; deployment is last.
 
 ## Accounts and authentication
 
@@ -18,7 +18,7 @@ Deactivate/reactivate instead of deleting. Outstanding unverified jobs or schedu
 |---|---|---|---|
 | Accounts | Own password/profile identity | Own password/profile identity | Create, activate, reset, unlock, deactivate, reactivate, manage roles |
 | Complaints | Submit as self; own list/details | Complaints linked to assigned work | Review all and assign work |
-| Assets | Non-retired reporting lookup | Assets linked to assigned jobs/inspections | All; register |
+| Assets | Non-retired reporting lookup | Assets linked to assigned jobs/inspections | All; register, lifecycle and evidence-backed hold clearance |
 | Work | Own complaint progress | Assigned jobs; start/complete | Assign/reassign unstarted jobs; verify |
 | History | Own complaint completion records | Technical history of assigned assets without unrelated requester identity | All history |
 | Inspections | No standalone inspection access | Assigned inspections; pass/fail | Schedule, assign/reassign, review |
@@ -28,7 +28,7 @@ Deactivate/reactivate instead of deleting. Outstanding unverified jobs or schedu
 
 Service checks apply to lists, individual lookups and writes. Read scopes are applied in SQL before object reconstruction. Actor-ID fields are removed from forms; compatibility overloads reject actor IDs that differ from the authenticated account. Target technician IDs remain assignment inputs. Completion produces one maintenance record atomically; invalid/stale actions roll back.
 
-All service operations validate sessions and use the same transaction as repository writes/audit. A single security coordination row serializes local service operations to protect role/reset/deactivation races. This intentionally simple local mechanism prioritizes correctness; larger-scale concurrency is future work. SQL remains in repositories/security persistence helpers, never JavaFX views. Database calls run on background virtual threads, with UI callbacks on the JavaFX thread; input is retained on failure.
+All service operations validate sessions and use the same transaction as repository writes/audit. READ COMMITTED prevents an early schema read from retaining a stale snapshot while waiting for a lock. Transaction-bound asset locks coordinate availability changes. A single security coordination row serializes local service operations to protect role/reset/deactivation races. This intentionally simple local mechanism prioritizes correctness; larger-scale concurrency is future work. SQL remains in repositories/security persistence helpers, never JavaFX views. Database calls run on background virtual threads, with UI callbacks on the JavaFX thread; input is retained on failure.
 
 The trusted local client and its service checks are the enforcement boundary for this milestone. Someone possessing database credentials or modifying the desktop client can bypass Java checks. This is not a secure remote multi-user deployment. Establish a trusted backend/enforcement boundary before deployment.
 
@@ -47,7 +47,9 @@ mvn exec:java "-Dexec.mainClass=com.aceos.database.Migrations"
 
 `V001__accounts.sql` adds `user_accounts`, nullable inspection assignment, `action_audit`, `security_gate`, operator-only `operator_setup` and migration metadata. Existing users/operational IDs/foreign keys are preserved; passwords are not invented, and scheduled inspections are not assigned automatically. Normalized email collisions/invalid users stop preflight. History stores checksums and STARTED/COMPLETE status. MySQL DDL is not treated as rollback-safe: an interrupted/mismatched migration stops for deliberate restore/repair. The app refuses absent/incompatible migration state.
 
-4. Create a separate runtime account. Grant SELECT/INSERT/UPDATE only on `users`, `assets`, `complaints`, `work_orders`, `maintenance_records`, `preventive_maintenance_schedules`, `asset_inspections`, `user_accounts`, `action_audit`, `security_gate`; grant SELECT on `schema_migrations`. Give the runtime account no access to `operator_setup` and no DDL/DROP/DELETE permissions.
+`V002__availability.sql` separates manual lifecycle from effective `assets.status`, adds independent auditable safety holds, administrator lifecycle history and precise evidence-recording timestamps. Before first application, preflight reports affected IDs for inconsistent work timestamps, unsupported UNDER_MAINTENANCE, ACTIVE with started-unverified jobs, retired assets with unfinished operations, or any historical failed inspection. Stop for a reviewed mapping; do not invent a manual state, hold or historical clearance. Supported UNDER_MAINTENANCE maps to manual ACTIVE; ACTIVE/OUT_OF_SERVICE/RETIRED manual states and all operational IDs/history remain intact. V001/V002 checksums and completion are required at sign-in. Existing F1 runtime accounts need SELECT/INSERT/UPDATE grants on only the two added tables after migration. Historical passing inspections have no new recording timestamp and cannot serve as later clearance evidence.
+
+4. Create a separate runtime account. Grant SELECT/INSERT/UPDATE only on `users`, `assets`, `complaints`, `work_orders`, `maintenance_records`, `preventive_maintenance_schedules`, `asset_inspections`, `user_accounts`, `action_audit`, `security_gate`, `asset_safety_holds`, `asset_lifecycle_history`; grant SELECT on `schema_migrations`. Give the runtime account no access to `operator_setup` and no DDL/DROP/DELETE permissions.
 5. Prepare an interactive operator console for private administrator bootstrap:
 
 ```powershell
@@ -64,7 +66,7 @@ Never commit environment files, credentials, dumps or temporary secrets. `.local
 
 ## Existing data, backup and recovery
 
-Do not migrate the valuable original database in place. Taking/migrating a copy is a separate approved action. Before doing so: back up, prove restoration into a fresh isolated schema, compare operational row counts/IDs/links, inspect normalized-email collisions and invalid references, then migrate the copy. Keep the v1 executable with its original schema; do not run it blindly against migrated data. There is no destructive down migration.
+Do not migrate the valuable original database in place. Taking/migrating a copy is a separate approved action. Stop the application before schema changes. Before doing so: back up, prove restoration into a fresh isolated schema, compare operational row counts/IDs/links, inspect normalized-email collisions and invalid references, then migrate the copy. Keep the v1 executable with its original schema; do not run it blindly against migrated data. There is no destructive down migration.
 
 The local F1 check restored a development backup into a disposable restore schema and confirmed its user count/account state. It did not copy or migrate the valuable v1 database. Obsolete executable verification classes have been removed from application source; current tests live under `src/test/java`. `Main` launches the authenticated JavaFX application.
 
@@ -85,6 +87,16 @@ The checks cover accounts/sessions, role ownership, workflow transactions, concu
 
 Human checks remaining: private development administrator bootstrap/sign-in, keyboard/screen-reader navigation, credential delivery and reset feedback across live windows.
 
+## Asset availability and safety holds
+
+Manual lifecycle: ACTIVE, OUT_OF_SERVICE or RETIRED. Effective availability precedence: RETIRED → OUT_OF_SERVICE for a manual or safety hold → UNDER_MAINTENANCE while any started-unverified job remains → ACTIVE. Submission, acceptance and assignment alone do not take an asset offline. Completion awaits verification. Overlapping repairs are permitted; verifying one closes only its complaint, and repair on an Out-of-service asset does not lift its hold. Inspection compliance remains a separate result.
+
+Every failed inspection atomically records its own hold. Only administrators may clear individual holds with a nonblank reason and exactly one same-asset evidence ID: a passing reinspection recorded after the failure and with a completion date no earlier than the failed inspection (same-day reinspections are supported), or a corrective work order verified after the hold. Earlier, unrelated, unverified or missing evidence is rejected. Clearance records the actor, reason, evidence and time; another hold/manual stop/repair still restricts availability. Manual lifecycle changes retain reason/actor/history and reject stale expected lifecycle values. Retirement requires no unfinished jobs, scheduled inspections or active preventive schedules, preserves history, and blocks new operations. Reopening/cancellation/repair-return remain outside F2.
+
+Administrator navigation includes **Asset Availability** for ID-based loading, lifecycle changes and hold clearance. Asset Directory labels manual lifecycle separately from availability; existing active-asset totals use the recalculated status. Full connected refresh is still Phase 3; refresh/reload existing directories after actions.
+
+**F2 verification (2026-10-12):** 25 distinct relevant checks passed across focused runs: 21 database, 3 password/session and 1 F2 JavaFX check. Coverage includes overlapping completion/verification orders, failure during repair, independent holds, role denial, same-asset/later evidence and backdated evidence rejection, manual stop/retirement/stale changes, concurrent verification/failure, linked-write rollback, real V1→V2 supported mapping, rerun/checksum/interruption and preserved IDs/history/scoped totals. F2 snapshots/input recovery passed at 800×520 and 1280×800; unchanged F1 UI captures were not repeated. Both ignored pre-F2 development/test backups restored into disposable schemas; user/account/migration checksums matched before migration. V002 applied/reran on only the isolated schemas; development account data remains pending private bootstrap. Human checks remain private sign-in and live-window keyboard/screen-reader/action feedback; snapshots use controlled display fixtures, not dev logins.
+
 ## Next chunk
 
-The approved Segoe UI/navy-blue/light direction is used on the F1 additions. Full shell/dashboard and connected-screen refresh remain Phase 2/3. F1 retains existing asset-status rules; [F2 availability and safety holds](f2-proposal.md) requires its own go-ahead.
+F2 availability and safety holds are implemented and locally verified. Review the Phase 2 shell/three-role-dashboard chunk next; connected-screen refresh remains Phase 3. The approved Segoe UI/navy-blue/light direction remains. No deployment or new release/tag during F2.

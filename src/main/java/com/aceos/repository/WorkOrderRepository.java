@@ -115,6 +115,7 @@ public class WorkOrderRepository {
                     a.category,
                     a.location,
                     a.status AS asset_status,
+                    a.manual_lifecycle,
 
                     requester.user_id AS requester_id,
                     requester.name AS requester_name,
@@ -177,6 +178,7 @@ public class WorkOrderRepository {
                     a.category,
                     a.location,
                     a.status AS asset_status,
+                    a.manual_lifecycle,
 
                     requester.user_id AS requester_id,
                     requester.name AS requester_name,
@@ -224,7 +226,8 @@ public class WorkOrderRepository {
                         resultSet.getString("asset_name"),
                         resultSet.getString("category"),
                         resultSet.getString("location"),
-                        AssetStatus.valueOf(resultSet.getString("asset_status")));
+                        AssetStatus.valueOf(resultSet.getString("asset_status")),
+                        com.aceos.model.ManualLifecycle.valueOf(resultSet.getString("manual_lifecycle")));
 
         User requester =
                 new User(
@@ -351,22 +354,7 @@ public class WorkOrderRepository {
                     "The work order was not in the expected " + "ASSIGNED database state");
         }
 
-        String assetSql =
-                """
-                UPDATE assets
-                SET status = ?
-                WHERE asset_id = ?
-                  AND status = 'ACTIVE'
-                """;
-
-        try (PreparedStatement statement = connection.prepareStatement(assetSql)) {
-            statement.setString(1, workOrder.getComplaint().getAsset().getStatus().name());
-            statement.setInt(2, workOrder.getComplaint().getAsset().getAssetId());
-
-            requireOneUpdatedRow(
-                    statement.executeUpdate(),
-                    "The asset was not in the expected " + "ACTIVE database state");
-        }
+        AvailabilityRepository.recalculate(workOrder.getComplaint().getAsset().getAssetId());
     }
 
     static void persistCompletion(Connection connection, WorkOrder workOrder) throws SQLException {
@@ -397,7 +385,7 @@ public class WorkOrderRepository {
                 """
                 UPDATE work_orders
                 SET status = ?,
-                    verified_at = ?
+                    verified_at = CURRENT_TIMESTAMP(6)
                 WHERE work_order_id = ?
                   AND status = 'COMPLETED'
                   AND verified_at IS NULL
@@ -405,30 +393,14 @@ public class WorkOrderRepository {
 
         try (PreparedStatement statement = connection.prepareStatement(workOrderSql)) {
             statement.setString(1, workOrder.getStatus().name());
-            statement.setTimestamp(2, Timestamp.valueOf(workOrder.getVerifiedAt()));
-            statement.setInt(3, workOrder.getWorkOrderId());
+            statement.setInt(2, workOrder.getWorkOrderId());
 
             requireOneUpdatedRow(
                     statement.executeUpdate(),
                     "The work order was not in the expected " + "COMPLETED database state");
         }
 
-        String assetSql =
-                """
-                UPDATE assets
-                SET status = ?
-                WHERE asset_id = ?
-                  AND status = 'UNDER_MAINTENANCE'
-                """;
-
-        try (PreparedStatement statement = connection.prepareStatement(assetSql)) {
-            statement.setString(1, workOrder.getComplaint().getAsset().getStatus().name());
-            statement.setInt(2, workOrder.getComplaint().getAsset().getAssetId());
-
-            requireOneUpdatedRow(
-                    statement.executeUpdate(),
-                    "The asset was not in the expected " + "UNDER_MAINTENANCE database state");
-        }
+        AvailabilityRepository.recalculate(workOrder.getComplaint().getAsset().getAssetId());
 
         String complaintSql =
                 """
@@ -459,23 +431,12 @@ public class WorkOrderRepository {
                     throw new IllegalArgumentException(
                             "An in-progress work order requires a start time");
                 }
-
-                if (workOrder.getComplaint().getAsset().getStatus()
-                        != AssetStatus.UNDER_MAINTENANCE) {
-                    throw new IllegalArgumentException("The asset must be under maintenance");
-                }
             }
 
             case COMPLETED -> {
                 if (workOrder.getStartedAt() == null || workOrder.getCompletedAt() == null) {
                     throw new IllegalArgumentException(
                             "A completed work order requires " + "start and completion times");
-                }
-
-                if (workOrder.getComplaint().getAsset().getStatus()
-                        != AssetStatus.UNDER_MAINTENANCE) {
-                    throw new IllegalArgumentException(
-                            "The completed work-order asset must " + "remain under maintenance");
                 }
             }
 
@@ -485,11 +446,6 @@ public class WorkOrderRepository {
                         || workOrder.getVerifiedAt() == null) {
                     throw new IllegalArgumentException(
                             "A verified work order requires all " + "lifecycle timestamps");
-                }
-
-                if (workOrder.getComplaint().getAsset().getStatus() != AssetStatus.ACTIVE) {
-                    throw new IllegalArgumentException(
-                            "The verified work-order asset must be active");
                 }
 
                 if (workOrder.getComplaint().getStatus() != ComplaintStatus.RESOLVED) {

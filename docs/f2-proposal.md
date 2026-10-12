@@ -1,6 +1,6 @@
 # F2 proposal — consistent asset availability
 
-Proposed 12 October 2026. Not implemented. Requires Smit's next chunk go-ahead under D-007.
+Approved 12 October 2026 under D-007; implemented and locally verified on `codex/role-based-foundation`. See [foundation setup and verification](foundation.md) for delivered behaviour and actual results. The original approved scope and named maintenance plan below are retained.
 
 ## Scope and expected behaviour
 

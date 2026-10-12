@@ -24,9 +24,10 @@ public class AssetRepository {
                     name,
                     category,
                     location,
-                    status
+                    status,
+                    manual_lifecycle
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """;
 
         try (Connection connection = DatabaseConnection.getConnection();
@@ -37,6 +38,7 @@ public class AssetRepository {
             statement.setString(3, asset.getCategory());
             statement.setString(4, asset.getLocation());
             statement.setString(5, asset.getStatus().name());
+            statement.setString(6, asset.getManualLifecycle().name());
 
             int affectedRows = statement.executeUpdate();
 
@@ -71,7 +73,8 @@ public class AssetRepository {
                     name,
                     category,
                     location,
-                    status
+                    status,
+                    manual_lifecycle
                 FROM assets
                 WHERE asset_id = ?
                 """;
@@ -90,7 +93,8 @@ public class AssetRepository {
                                     resultSet.getString("name"),
                                     resultSet.getString("category"),
                                     resultSet.getString("location"),
-                                    AssetStatus.valueOf(resultSet.getString("status")));
+                                    AssetStatus.valueOf(resultSet.getString("status")),
+                                    com.aceos.model.ManualLifecycle.valueOf(resultSet.getString("manual_lifecycle")));
 
                     return Optional.of(asset);
                 }
@@ -109,7 +113,8 @@ public class AssetRepository {
                     name,
                     category,
                     location,
-                    status
+                    status,
+                    manual_lifecycle
                 FROM assets
                 ORDER BY asset_code, asset_id
                 """;
@@ -128,7 +133,8 @@ public class AssetRepository {
                                 resultSet.getString("name"),
                                 resultSet.getString("category"),
                                 resultSet.getString("location"),
-                                AssetStatus.valueOf(resultSet.getString("status"))));
+                                AssetStatus.valueOf(resultSet.getString("status")),
+                                    com.aceos.model.ManualLifecycle.valueOf(resultSet.getString("manual_lifecycle"))));
             }
         }
 

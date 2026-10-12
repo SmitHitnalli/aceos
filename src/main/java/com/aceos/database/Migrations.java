@@ -42,34 +42,7 @@ public final class Migrations {
                         "CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY,"
                             + " checksum CHAR(64) NOT NULL, status VARCHAR(20) NOT NULL)");
                 preflight(c);
-                byte[] bytes;
-                try (var in =
-                        Migrations.class.getResourceAsStream("/database/V001__accounts.sql")) {
-                    if (in == null) throw new SQLException("Missing migration resource");
-                    bytes = in.readAllBytes();
-                }
-                String checksum = checksum(bytes);
-                try (ResultSet r =
-                        s.executeQuery(
-                                "SELECT checksum,status FROM schema_migrations WHERE version=1")) {
-                    if (r.next()) {
-                        if (!checksum.equals(r.getString(1)) || !"COMPLETE".equals(r.getString(2)))
-                            throw new SQLException(
-                                    "Migration mismatch or partial migration: restore reviewed"
-                                        + " backup before retrying");
-                        assertCompatible(c);
-                        return;
-                    }
-                }
-                try (PreparedStatement p =
-                        c.prepareStatement(
-                                "INSERT INTO schema_migrations VALUES (1,?,'STARTED')")) {
-                    p.setString(1, checksum);
-                    p.executeUpdate();
-                }
-                for (String sql : new String(bytes, StandardCharsets.UTF_8).split(";"))
-                    if (!sql.isBlank()) s.execute(sql);
-                s.executeUpdate("UPDATE schema_migrations SET status='COMPLETE' WHERE version=1");
+                for (int version = 1; version <= 2; version++) apply(c, version);
                 assertCompatible(c);
             } finally {
                 s.execute("SELECT RELEASE_LOCK('aceos_foundation_migration')");
@@ -98,25 +71,80 @@ public final class Migrations {
         }
     }
 
-    public static void assertCompatible(Connection c) throws SQLException {
-        try (Statement s = c.createStatement();
-                ResultSet r =
-                        s.executeQuery(
-                                "SELECT version,status,checksum FROM schema_migrations ORDER BY"
-                                    + " version")) {
-            if (!r.next() || r.getInt(1) != 1 || !"COMPLETE".equals(r.getString(2)))
-                throw new SQLException("Run the reviewed foundation migration before signing in");
-            try (var in = Migrations.class.getResourceAsStream("/database/V001__accounts.sql")) {
-                String checksum = checksum(in.readAllBytes());
-                if (!checksum.equals(r.getString(3)) || r.next())
-                    throw new SQLException("Incompatible schema migration version/checksum");
-            } catch (java.io.IOException e) {
-                throw new SQLException("Migration verification failed", e);
+    private static byte[] resource(int version) throws SQLException {
+        String name = version == 1 ? "V001__accounts.sql" : "V002__availability.sql";
+        try (var in = Migrations.class.getResourceAsStream("/database/" + name)) {
+            if (in == null) throw new SQLException("Missing migration resource");
+            return in.readAllBytes();
+        } catch (java.io.IOException e) { throw new SQLException("Migration resource failed", e); }
+    }
+
+    private static void apply(Connection c, int version) throws SQLException {
+        byte[] bytes = resource(version);
+        String expected = checksum(bytes);
+        try (var p = c.prepareStatement("SELECT checksum,status FROM schema_migrations WHERE version=?")) {
+            p.setInt(1, version);
+            try (var r = p.executeQuery()) {
+                if (r.next()) {
+                    if (!expected.equals(r.getString(1)) || !"COMPLETE".equals(r.getString(2)))
+                        throw new SQLException("Migration " + version + " mismatch or partial migration: restore reviewed backup before retrying");
+                    return;
+                }
             }
         }
-        try (Statement s = c.createStatement()) {
+        if (version == 2) availabilityPreflight(c);
+        try (var p = c.prepareStatement("INSERT INTO schema_migrations VALUES (?,?,'STARTED')")) {
+            p.setInt(1, version); p.setString(2, expected); p.executeUpdate();
+        }
+        try (var s = c.createStatement()) {
+            for (String sql : new String(bytes, StandardCharsets.UTF_8).split(";"))
+                if (!sql.isBlank()) s.execute(sql);
+            s.executeUpdate("UPDATE schema_migrations SET status='COMPLETE' WHERE version=" + version);
+        }
+    }
+
+    private static void rejectRows(Connection c, String sql, String message) throws SQLException {
+        try (var s = c.createStatement(); var r = s.executeQuery(sql)) {
+            var ids = new java.util.ArrayList<Integer>();
+            while (r.next() && ids.size() < 20) ids.add(r.getInt(1));
+            if (!ids.isEmpty()) throw new SQLException(message + " (IDs, up to 20): " + ids + "; reviewed mapping required before F2");
+        }
+    }
+
+    public static void availabilityPreflight(Connection c) throws SQLException {
+        rejectRows(c, "SELECT inspection_id FROM asset_inspections WHERE status='FAILED'",
+                "Historical failed inspections have ambiguous hold/clearance history");
+        rejectRows(c, "SELECT work_order_id FROM work_orders WHERE"
+                + " (status='ASSIGNED' AND (started_at IS NOT NULL OR completed_at IS NOT NULL OR verified_at IS NOT NULL))"
+                + " OR (status='IN_PROGRESS' AND (started_at IS NULL OR completed_at IS NOT NULL OR verified_at IS NOT NULL))"
+                + " OR (status='COMPLETED' AND (started_at IS NULL OR completed_at IS NULL OR verified_at IS NOT NULL))"
+                + " OR (status='VERIFIED' AND (started_at IS NULL OR completed_at IS NULL OR verified_at IS NULL))",
+                "Work-order lifecycle timestamps inconsistent");
+        rejectRows(c, "SELECT a.asset_id FROM assets a WHERE"
+                + " (a.status='UNDER_MAINTENANCE' AND NOT EXISTS (SELECT 1 FROM work_orders w JOIN complaints x ON x.complaint_id=w.complaint_id WHERE x.asset_id=a.asset_id AND w.started_at IS NOT NULL AND w.verified_at IS NULL))"
+                + " OR (a.status='ACTIVE' AND EXISTS (SELECT 1 FROM work_orders w JOIN complaints x ON x.complaint_id=w.complaint_id WHERE x.asset_id=a.asset_id AND w.started_at IS NOT NULL AND w.verified_at IS NULL))"
+                + " OR (a.status='RETIRED' AND (EXISTS (SELECT 1 FROM work_orders w JOIN complaints x ON x.complaint_id=w.complaint_id WHERE x.asset_id=a.asset_id AND w.status<>'VERIFIED')"
+                + " OR EXISTS (SELECT 1 FROM asset_inspections i WHERE i.asset_id=a.asset_id AND i.status='SCHEDULED')"
+                + " OR EXISTS (SELECT 1 FROM preventive_maintenance_schedules p WHERE p.asset_id=a.asset_id AND p.status='ACTIVE')))",
+                "Asset availability inconsistent with operational records");
+    }
+
+    public static void assertCompatible(Connection c) throws SQLException {
+        try (var s = c.createStatement(); var r = s.executeQuery(
+                "SELECT version,status,checksum FROM schema_migrations ORDER BY version")) {
+            for (int version = 1; version <= 2; version++) {
+                if (!r.next() || r.getInt(1) != version || !"COMPLETE".equals(r.getString(2))
+                        || !checksum(resource(version)).equals(r.getString(3)))
+                    throw new SQLException("Run reviewed F1/F2 migrations; incompatible version/checksum");
+            }
+            if (r.next()) throw new SQLException("Unsupported migration version");
+        }
+        try (var s = c.createStatement()) {
             s.executeQuery("SELECT auth_version FROM user_accounts LIMIT 0").close();
-            s.executeQuery("SELECT assigned_to_user_id FROM asset_inspections LIMIT 0").close();
+            s.executeQuery("SELECT assigned_to_user_id,completed_at FROM asset_inspections LIMIT 0").close();
+            s.executeQuery("SELECT manual_lifecycle FROM assets LIMIT 0").close();
+            s.executeQuery("SELECT clearance_reason FROM asset_safety_holds LIMIT 0").close();
+            s.executeQuery("SELECT reason FROM asset_lifecycle_history LIMIT 0").close();
         }
     }
     /** Git checkouts may use CRLF on Windows; line endings must not change migration identity. */

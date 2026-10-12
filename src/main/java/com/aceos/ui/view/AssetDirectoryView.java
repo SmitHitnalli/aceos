@@ -25,16 +25,18 @@ import java.util.Locale;
 public class AssetDirectoryView extends VBox {
 
     public AssetDirectoryView(AceOsService service) {
-        setSpacing(18);
-        setPadding(new Insets(40));
+        setSpacing(16);
+        setPadding(new Insets(24));
+        setMinHeight(0);
 
         Label title = new Label("Asset Directory");
         title.setStyle(
                 "-fx-font-size: 28px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #1e293b;");
 
         Label description =
-                new Label("View asset IDs and current statuses " + "for complaint submission.");
+                new Label("Operational availability includes all started unverified repairs and safety holds. Inspection compliance is separate.");
         description.setWrapText(true);
+        description.setMinHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
         description.setStyle("-fx-font-size: 15px;" + "-fx-text-fill: #475569;");
 
         TextField searchField = new TextField();
@@ -60,26 +62,36 @@ public class AssetDirectoryView extends VBox {
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
         TableColumn<Asset, Number> idColumn = new TableColumn<>("ID");
+        idColumn.setMinWidth(44); idColumn.setPrefWidth(44); idColumn.setMaxWidth(60);
         idColumn.setCellValueFactory(
                 data -> new ReadOnlyIntegerWrapper(data.getValue().getAssetId()));
 
         TableColumn<Asset, String> codeColumn = new TableColumn<>("Asset Code");
+        codeColumn.setMinWidth(80); codeColumn.setPrefWidth(80);
         codeColumn.setCellValueFactory(
                 data -> new ReadOnlyStringWrapper(data.getValue().getAssetCode()));
 
         TableColumn<Asset, String> nameColumn = new TableColumn<>("Name");
+        nameColumn.setMinWidth(90); nameColumn.setPrefWidth(100);
         nameColumn.setCellValueFactory(
                 data -> new ReadOnlyStringWrapper(data.getValue().getName()));
 
         TableColumn<Asset, String> categoryColumn = new TableColumn<>("Category");
+        categoryColumn.setMinWidth(65); categoryColumn.setPrefWidth(65);
         categoryColumn.setCellValueFactory(
                 data -> new ReadOnlyStringWrapper(data.getValue().getCategory()));
 
         TableColumn<Asset, String> locationColumn = new TableColumn<>("Location");
+        locationColumn.setMinWidth(70); locationColumn.setPrefWidth(70);
         locationColumn.setCellValueFactory(
                 data -> new ReadOnlyStringWrapper(data.getValue().getLocation()));
 
-        TableColumn<Asset, String> statusColumn = new TableColumn<>("Status");
+        TableColumn<Asset, String> lifecycleColumn = new TableColumn<>("Manual lifecycle");
+        lifecycleColumn.setMinWidth(140); lifecycleColumn.setPrefWidth(140);
+        lifecycleColumn.setCellValueFactory(
+                data -> new ReadOnlyStringWrapper(data.getValue().getManualLifecycle().name()));
+        TableColumn<Asset, String> statusColumn = new TableColumn<>("Availability");
+        statusColumn.setMinWidth(180); statusColumn.setPrefWidth(180);
         statusColumn.setCellValueFactory(
                 data -> new ReadOnlyStringWrapper(data.getValue().getStatus().name()));
 
@@ -88,8 +100,11 @@ public class AssetDirectoryView extends VBox {
         table.getColumns().add(nameColumn);
         table.getColumns().add(categoryColumn);
         table.getColumns().add(locationColumn);
+        table.getColumns().add(lifecycleColumn);
         table.getColumns().add(statusColumn);
         table.setPrefHeight(420);
+        table.setMinHeight(120);
+        VBox.setVgrow(table, Priority.ALWAYS);
 
         Button refreshButton = new Button("Refresh Assets");
         refreshButton.setMinHeight(40);

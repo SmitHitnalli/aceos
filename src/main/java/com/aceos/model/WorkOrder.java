@@ -58,7 +58,7 @@ public class WorkOrder {
                 Objects.requireNonNull(assignedAt, "Assignment time is required").withNano(0);
         this.startedAt = normalizeTimestamp(startedAt);
         this.completedAt = normalizeTimestamp(completedAt);
-        this.verifiedAt = normalizeTimestamp(verifiedAt);
+        this.verifiedAt = verifiedAt;
     }
 
     public void start() {
@@ -66,7 +66,6 @@ public class WorkOrder {
 
         status = WorkOrderStatus.IN_PROGRESS;
         startedAt = LocalDateTime.now().withNano(0);
-        complaint.getAsset().setStatus(AssetStatus.UNDER_MAINTENANCE);
     }
 
     public void complete() {
@@ -87,7 +86,6 @@ public class WorkOrder {
 
         status = WorkOrderStatus.VERIFIED;
         verifiedAt = LocalDateTime.now().withNano(0);
-        complaint.getAsset().setStatus(AssetStatus.ACTIVE);
         complaint.resolve();
     }
 

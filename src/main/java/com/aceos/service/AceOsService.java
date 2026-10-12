@@ -1,6 +1,9 @@
 package com.aceos.service;
 
 import com.aceos.database.Transactions;
+import com.aceos.repository.AvailabilityRepository;
+import com.aceos.model.ManualLifecycle;
+import com.aceos.model.SafetyHold;
 import com.aceos.model.Asset;
 import com.aceos.model.AssetInspection;
 import com.aceos.model.AssetStatus;
@@ -159,6 +162,7 @@ public class AceOsService {
                 "The preventive maintenance schedule " + "could not be created",
                 () -> {
                     Asset asset = requireAsset(assetId);
+                    AvailabilityRepository.requireOperational(assetId);
 
                     if (asset.getStatus() == AssetStatus.RETIRED) {
                         throw new IllegalStateException(
@@ -210,6 +214,7 @@ public class AceOsService {
 
                     LocalDate expectedDueDate = schedule.getNextDueDate();
 
+                    AvailabilityRepository.requireOperational(schedule.getAsset().getAssetId());
                     schedule.activate();
 
                     preventiveMaintenanceScheduleRepository.updateLifecycle(
@@ -240,6 +245,7 @@ public class AceOsService {
 
                     LocalDate expectedDueDate = schedule.getNextDueDate();
 
+                    AvailabilityRepository.requireOperational(schedule.getAsset().getAssetId());
                     schedule.recordCompletion(validCompletionDate);
 
                     preventiveMaintenanceScheduleRepository.updateLifecycle(
@@ -289,6 +295,7 @@ public class AceOsService {
                 "The inspection could not be scheduled",
                 () -> {
                     Asset asset = requireAsset(assetId);
+                    AvailabilityRepository.requireOperational(assetId);
 
                     if (asset.getStatus() == AssetStatus.RETIRED) {
                         throw new IllegalStateException(
@@ -331,11 +338,15 @@ public class AceOsService {
                 () -> {
                     requireAssignedInspection(inspectionId);
                     AssetInspection inspection = requireAssetInspection(inspectionId);
+                    AvailabilityRepository.requireOperational(inspection.getAsset().getAssetId());
                     requireActor(technicianId);
                     User technician = Scope.user();
 
                     inspection.complete(technician, validResult, validNotes, validCompletionDate);
                     assetInspectionRepository.updateCompletion(inspection);
+                    if (validResult == InspectionStatus.FAILED)
+                        AvailabilityRepository.createFailureHold(inspection.getAsset().getAssetId(), inspectionId);
+                    else AvailabilityRepository.recalculate(inspection.getAsset().getAssetId());
 
                     return requireAssetInspection(inspectionId);
                 });
@@ -379,6 +390,7 @@ public class AceOsService {
                 "The complaint could not be submitted",
                 () -> {
                     Asset asset = requireAsset(assetId);
+                    AvailabilityRepository.requireOperational(assetId);
                     if (asset.getStatus() == AssetStatus.RETIRED)
                         throw new IllegalStateException(
                                 "A retired asset cannot receive a complaint");
@@ -407,6 +419,7 @@ public class AceOsService {
                 "The complaint could not be accepted",
                 () -> {
                     Complaint complaint = requireComplaint(complaintId);
+                    AvailabilityRepository.requireOperational(complaint.getAsset().getAssetId());
                     requireActor(administratorId);
                     User administrator = Scope.user();
 
@@ -429,6 +442,7 @@ public class AceOsService {
                 "The complaint could not be rejected",
                 () -> {
                     Complaint complaint = requireComplaint(complaintId);
+                    AvailabilityRepository.requireOperational(complaint.getAsset().getAssetId());
                     requireActor(administratorId);
                     User administrator = Scope.user();
 
@@ -451,6 +465,7 @@ public class AceOsService {
                 () -> {
                     requireActiveTechnician(technicianId);
                     Complaint complaint = requireComplaint(complaintId);
+                    AvailabilityRepository.requireOperational(complaint.getAsset().getAssetId());
                     User technician = requireUser(technicianId);
 
                     return workOrderRepository.save(new WorkOrder(complaint, technician));
@@ -467,6 +482,7 @@ public class AceOsService {
                 () -> {
                     requireAssignedWork(workOrderId);
                     WorkOrder workOrder = requireWorkOrder(workOrderId);
+                    AvailabilityRepository.requireOperational(workOrder.getComplaint().getAsset().getAssetId());
 
                     workOrder.start();
                     workOrderRepository.updateLifecycle(workOrder);
@@ -488,6 +504,7 @@ public class AceOsService {
                 () -> {
                     requireAssignedWork(workOrderId);
                     WorkOrder workOrder = requireWorkOrder(workOrderId);
+                    AvailabilityRepository.requireOperational(workOrder.getComplaint().getAsset().getAssetId());
 
                     return maintenanceWorkflowRepository.completeWithMaintenanceRecord(
                             workOrder, validAction);
@@ -506,6 +523,7 @@ public class AceOsService {
                 "The work order could not be verified",
                 () -> {
                     WorkOrder workOrder = requireWorkOrder(workOrderId);
+                    AvailabilityRepository.requireOperational(workOrder.getComplaint().getAsset().getAssetId());
                     requireActor(administratorId);
                     User administrator = Scope.user();
 
@@ -557,6 +575,40 @@ public class AceOsService {
     public List<Asset> getAllAssets() throws AceOsServiceException {
         return execute(
                 null, "getAllAssets", "The assets could not be loaded", assetRepository::findAll);
+    }
+
+    public Asset changeAssetLifecycle(int assetId, ManualLifecycle expected, ManualLifecycle next, String reason)
+            throws AceOsServiceException {
+        requireId(assetId, "Asset");
+        requireValue(expected, "Current lifecycle required");
+        requireValue(next, "New lifecycle required");
+        String validReason = requireText(reason, "Lifecycle reason", 1000);
+        return execute(UserRole.ADMINISTRATOR, "changeAssetLifecycle", "Lifecycle could not be changed", () -> {
+            requireAsset(assetId);
+            AvailabilityRepository.changeLifecycle(assetId, expected, next, validReason);
+            return requireAsset(assetId);
+        });
+    }
+
+    public List<SafetyHold> getSafetyHolds(int assetId) throws AceOsServiceException {
+        requireId(assetId, "Asset");
+        return execute(UserRole.ADMINISTRATOR, "getSafetyHolds", "Holds could not be loaded", () -> {
+            requireAsset(assetId);
+            return AvailabilityRepository.holds(assetId);
+        });
+    }
+
+    public Asset clearSafetyHold(int assetId, int holdId, String reason, Integer passingInspectionId, Integer verifiedWorkOrderId)
+            throws AceOsServiceException {
+        requireId(assetId, "Asset"); requireId(holdId, "Hold");
+        String validReason = requireText(reason, "Clearance reason", 1000);
+        if (passingInspectionId != null) requireId(passingInspectionId, "Passing inspection");
+        if (verifiedWorkOrderId != null) requireId(verifiedWorkOrderId, "Verified work order");
+        return execute(UserRole.ADMINISTRATOR, "clearSafetyHold", "Hold could not be cleared", () -> {
+            requireAsset(assetId);
+            AvailabilityRepository.clearHold(assetId, holdId, validReason, passingInspectionId, verifiedWorkOrderId);
+            return requireAsset(assetId);
+        });
     }
 
     public Complaint getComplaint(int complaintId) throws AceOsServiceException {

@@ -114,6 +114,7 @@ public class ComplaintRepository {
                     a.category,
                     a.location,
                     a.status AS asset_status,
+                    a.manual_lifecycle,
 
                     u.user_id,
                     u.name AS reporter_name,
@@ -158,6 +159,7 @@ public class ComplaintRepository {
                     a.category,
                     a.location,
                     a.status AS asset_status,
+                    a.manual_lifecycle,
 
                     u.user_id,
                     u.name AS reporter_name,
@@ -194,7 +196,8 @@ public class ComplaintRepository {
                         resultSet.getString("asset_name"),
                         resultSet.getString("category"),
                         resultSet.getString("location"),
-                        AssetStatus.valueOf(resultSet.getString("asset_status")));
+                        AssetStatus.valueOf(resultSet.getString("asset_status")),
+                        com.aceos.model.ManualLifecycle.valueOf(resultSet.getString("manual_lifecycle")));
 
         User reportedBy =
                 new User(

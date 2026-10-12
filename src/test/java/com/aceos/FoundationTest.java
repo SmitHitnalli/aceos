@@ -58,6 +58,8 @@ class FoundationTest {
             for (String table :
                     List.of(
                             "action_audit",
+                            "asset_safety_holds",
+                            "asset_lifecycle_history",
                             "maintenance_records",
                             "work_orders",
                             "complaints",
@@ -445,4 +447,234 @@ class FoundationTest {
             }
         }
     }
+    AssetInspection inspection(Asset a, InspectionStatus result) throws Exception {
+        var i = admin.scheduleAssetInspection(a.getAssetId(), "Safety", LocalDate.now());
+        admin.assignInspection(i.getInspectionId(), 5);
+        return technician.completeAssetInspection(i.getInspectionId(), result, "Safety result", LocalDate.now());
+    }
+
+    @Test
+    void f2OverlappingRepairsInBothCompletionAndVerificationOrders() throws Exception {
+        for (boolean reverse : List.of(false, true)) {
+            Asset a = asset("OVERLAP" + reverse);
+            WorkOrder first = assigned(a), second = assigned(a);
+            assertEquals(AssetStatus.ACTIVE, admin.getAsset(a.getAssetId()).getStatus());
+            technician.startWorkOrder(first.getWorkOrderId());
+            technician.startWorkOrder(second.getWorkOrderId());
+            var early = reverse ? second : first; var later = reverse ? first : second;
+            technician.completeWorkOrder(early.getWorkOrderId(), "First correction");
+            admin.verifyWorkOrder(early.getWorkOrderId());
+            assertEquals(AssetStatus.UNDER_MAINTENANCE, admin.getAsset(a.getAssetId()).getStatus());
+            assertEquals(ComplaintStatus.RESOLVED, admin.getComplaint(early.getComplaint().getComplaintId()).getStatus());
+            technician.completeWorkOrder(later.getWorkOrderId(), "Second correction");
+            assertEquals(AssetStatus.UNDER_MAINTENANCE, admin.getAsset(a.getAssetId()).getStatus());
+            admin.verifyWorkOrder(later.getWorkOrderId());
+            assertEquals(AssetStatus.ACTIVE, admin.getAsset(a.getAssetId()).getStatus());
+            assertEquals(2, admin.getAssetHistory(a.getAssetId()).size());
+        }
+        Asset a = asset("BOTH-COMPLETED");
+        var first = assigned(a); var second = assigned(a);
+        technician.startWorkOrder(first.getWorkOrderId()); technician.startWorkOrder(second.getWorkOrderId());
+        technician.completeWorkOrder(first.getWorkOrderId(), "One"); technician.completeWorkOrder(second.getWorkOrderId(), "Two");
+        admin.verifyWorkOrder(second.getWorkOrderId());
+        assertEquals(AssetStatus.UNDER_MAINTENANCE, admin.getAsset(a.getAssetId()).getStatus());
+        admin.verifyWorkOrder(first.getWorkOrderId());
+        assertEquals(AssetStatus.ACTIVE, admin.getAsset(a.getAssetId()).getStatus());
+    }
+
+    @Test
+    void f2FailureDuringRepairAndIndependentHolds() throws Exception {
+        Asset a = asset("HOLDS"); var w = assigned(a);
+        technician.startWorkOrder(w.getWorkOrderId());
+        var first = inspection(a, InspectionStatus.FAILED); var second = inspection(a, InspectionStatus.FAILED);
+        assertEquals(AssetStatus.OUT_OF_SERVICE, admin.getAsset(a.getAssetId()).getStatus());
+        assertEquals(ManualLifecycle.ACTIVE, admin.getAsset(a.getAssetId()).getManualLifecycle());
+        technician.completeWorkOrder(w.getWorkOrderId(), "Corrective repair"); admin.verifyWorkOrder(w.getWorkOrderId());
+        assertEquals(AssetStatus.OUT_OF_SERVICE, admin.getAsset(a.getAssetId()).getStatus());
+        var holds = admin.getSafetyHolds(a.getAssetId()); assertEquals(2, holds.size());
+        denied(() -> technician.clearSafetyHold(a.getAssetId(), holds.getFirst().holdId(), "Unsafe", null, w.getWorkOrderId()));
+        denied(() -> requester.getSafetyHolds(a.getAssetId()));
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), holds.getFirst().holdId(), "", null, w.getWorkOrderId()));
+        admin.clearSafetyHold(a.getAssetId(), holds.getFirst().holdId(), "Repair verified", null, w.getWorkOrderId());
+        assertEquals(AssetStatus.OUT_OF_SERVICE, admin.getAsset(a.getAssetId()).getStatus());
+        var pass = inspection(a, InspectionStatus.PASSED);
+        admin.clearSafetyHold(a.getAssetId(), holds.getLast().holdId(), "Reinspection passed", pass.getInspectionId(), null);
+        assertEquals(AssetStatus.ACTIVE, admin.getAsset(a.getAssetId()).getStatus());
+        assertEquals(InspectionStatus.FAILED, admin.getAssetInspection(first.getInspectionId()).getStatus());
+        assertEquals(InspectionStatus.FAILED, admin.getAssetInspection(second.getInspectionId()).getStatus());
+        var history = admin.getSafetyHolds(a.getAssetId());
+        assertEquals(1, history.getFirst().clearedBy()); assertEquals(w.getWorkOrderId(), history.getFirst().verifiedWorkOrderId());
+        assertNotNull(history.getLast().clearedAt());
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), holds.getLast().holdId(), "Duplicate", pass.getInspectionId(), null));
+        assertEquals(2, admin.getDashboardStatistics().getFailedInspections());
+    }
+
+    @Test
+    void f2UnsupportedEvidenceAndClearanceDuringRepair() throws Exception {
+        Asset a = asset("PROOF"); var oldPass = inspection(a, InspectionStatus.PASSED);
+        var oldWork = assigned(a); technician.startWorkOrder(oldWork.getWorkOrderId());
+        technician.completeWorkOrder(oldWork.getWorkOrderId(), "Old correction"); admin.verifyWorkOrder(oldWork.getWorkOrderId());
+        inspection(a, InspectionStatus.FAILED); var h = admin.getSafetyHolds(a.getAssetId()).getFirst();
+        var unrelated = inspection(asset("FOREIGN"), InspectionStatus.PASSED);
+        var backdated = admin.scheduleAssetInspection(a.getAssetId(), "Backdated result", LocalDate.now());
+        admin.assignInspection(backdated.getInspectionId(), 5);
+        technician.completeAssetInspection(backdated.getInspectionId(), InspectionStatus.PASSED, "Recorded later, performed earlier", LocalDate.now().minusDays(1));
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), h.holdId(), "Backdated", backdated.getInspectionId(), null));
+        var w = assigned(a); technician.startWorkOrder(w.getWorkOrderId());
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), h.holdId(), "Old pass", oldPass.getInspectionId(), null));
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), h.holdId(), "Old repair", null, oldWork.getWorkOrderId()));
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), h.holdId(), "Wrong asset", unrelated.getInspectionId(), null));
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), h.holdId(), "Not verified", null, w.getWorkOrderId()));
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), h.holdId(), "No evidence", null, null));
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), h.holdId(), "Two kinds", oldPass.getInspectionId(), w.getWorkOrderId()));
+        var pass = inspection(a, InspectionStatus.PASSED);
+        assertEquals(AssetStatus.OUT_OF_SERVICE, admin.getAsset(a.getAssetId()).getStatus());
+        admin.clearSafetyHold(a.getAssetId(), h.holdId(), "Passed later", pass.getInspectionId(), null);
+        assertEquals(AssetStatus.UNDER_MAINTENANCE, admin.getAsset(a.getAssetId()).getStatus());
+        technician.completeWorkOrder(w.getWorkOrderId(), "Finished"); admin.verifyWorkOrder(w.getWorkOrderId());
+        assertEquals(AssetStatus.ACTIVE, admin.getAsset(a.getAssetId()).getStatus());
+    }
+
+    @Test
+    void f2ManualHoldRetirementGuardsAndStaleLifecycle() throws Exception {
+        Asset a = asset("MANUAL");
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.OUT_OF_SERVICE, "Manual stop");
+        assertEquals(1, requester.getAllAssets().size());
+        var w = assigned(a); technician.startWorkOrder(w.getWorkOrderId());
+        denied(() -> admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.RETIRED, "Stale"));
+        denied(() -> admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.OUT_OF_SERVICE, ManualLifecycle.RETIRED, "Has job"));
+        technician.completeWorkOrder(w.getWorkOrderId(), "Corrected"); admin.verifyWorkOrder(w.getWorkOrderId());
+        assertEquals(AssetStatus.OUT_OF_SERVICE, admin.getAsset(a.getAssetId()).getStatus());
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.OUT_OF_SERVICE, ManualLifecycle.ACTIVE, "Return to operation");
+        var i = admin.scheduleAssetInspection(a.getAssetId(), "Safety", LocalDate.now());
+        denied(() -> admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.RETIRED, "Has inspection"));
+        admin.assignInspection(i.getInspectionId(), 5);
+        technician.completeAssetInspection(i.getInspectionId(), InspectionStatus.PASSED, "Passed", LocalDate.now());
+        var schedule = admin.createPreventiveMaintenanceSchedule(a.getAssetId(), "Care", 30, LocalDate.now());
+        denied(() -> admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.RETIRED, "Active schedule"));
+        admin.pausePreventiveMaintenanceSchedule(schedule.getMaintenanceScheduleId());
+        var pending = complaint(requester, a);
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.RETIRED, "End of life");
+        denied(() -> requester.submitComplaint(a.getAssetId(), "New", ComplaintPriority.LOW));
+        denied(() -> admin.acceptComplaint(pending.getComplaintId()));
+        denied(() -> admin.scheduleAssetInspection(a.getAssetId(), "New", LocalDate.now()));
+        denied(() -> admin.activatePreventiveMaintenanceSchedule(schedule.getMaintenanceScheduleId()));
+        denied(() -> admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.RETIRED, ManualLifecycle.ACTIVE, "Reopen"));
+        assertTrue(requester.getAllAssets().isEmpty());
+        assertEquals(1, admin.getAllAssets().size());
+        assertEquals(0, admin.getDashboardStatistics().getActiveAssets());
+        assertEquals(WorkOrderStatus.VERIFIED, admin.getWorkOrder(w.getWorkOrderId()).getStatus());
+    }
+
+    @Test
+    void f2ConcurrentVerifyAndInspectionFailureCannotRestoreActive() throws Exception {
+        Asset a = asset("RACE"); var w = assigned(a);
+        technician.startWorkOrder(w.getWorkOrderId()); technician.completeWorkOrder(w.getWorkOrderId(), "Fixed");
+        var i = admin.scheduleAssetInspection(a.getAssetId(), "Safety", LocalDate.now()); admin.assignInspection(i.getInspectionId(), 5);
+        var pool = Executors.newFixedThreadPool(2);
+        try {
+            var verify = pool.submit(() -> admin.verifyWorkOrder(w.getWorkOrderId()));
+            var fail = pool.submit(() -> technician.completeAssetInspection(i.getInspectionId(), InspectionStatus.FAILED, "Unsafe", LocalDate.now()));
+            verify.get(); fail.get();
+        } finally { pool.shutdown(); }
+        assertEquals(AssetStatus.OUT_OF_SERVICE, admin.getAsset(a.getAssetId()).getStatus());
+        assertEquals(1, admin.getSafetyHolds(a.getAssetId()).size());
+        assertEquals(0, admin.getDashboardStatistics().getActiveAssets());
+        assertEquals(AssetStatus.OUT_OF_SERVICE, technician.getAllAssets().getFirst().getStatus());
+        assertTrue(otherTechnician.getAllAssets().isEmpty());
+    }
+
+    @Test
+    void f2FailureHoldAndClearanceRollbackOnLinkedWriteFailure() throws Exception {
+        Asset a = asset("ROLLBACK");
+        var i = admin.scheduleAssetInspection(a.getAssetId(), "Safety", LocalDate.now()); admin.assignInspection(i.getInspectionId(), 5);
+        try (var c = operator(); var st = c.createStatement()) {
+            st.execute("ALTER TABLE asset_safety_holds ADD CONSTRAINT f2_reject_hold CHECK (asset_id < 0)");
+            try { denied(() -> technician.completeAssetInspection(i.getInspectionId(), InspectionStatus.FAILED, "Unsafe", LocalDate.now())); }
+            finally { st.execute("ALTER TABLE asset_safety_holds DROP CHECK f2_reject_hold"); }
+        }
+        assertEquals(InspectionStatus.SCHEDULED, admin.getAssetInspection(i.getInspectionId()).getStatus());
+        assertEquals(AssetStatus.ACTIVE, admin.getAsset(a.getAssetId()).getStatus());
+        assertTrue(admin.getSafetyHolds(a.getAssetId()).isEmpty());
+        technician.completeAssetInspection(i.getInspectionId(), InspectionStatus.FAILED, "Unsafe", LocalDate.now());
+        var pass = inspection(a, InspectionStatus.PASSED); var hold = admin.getSafetyHolds(a.getAssetId()).getFirst();
+        try (var c = operator(); var st = c.createStatement()) {
+            st.execute("ALTER TABLE assets ADD CONSTRAINT f2_reject_asset CHECK (status <> 'ACTIVE')");
+            try { denied(() -> admin.clearSafetyHold(a.getAssetId(), hold.holdId(), "Proof", pass.getInspectionId(), null)); }
+            finally { st.execute("ALTER TABLE assets DROP CHECK f2_reject_asset"); }
+        }
+        assertNull(admin.getSafetyHolds(a.getAssetId()).getFirst().clearedAt());
+        assertEquals(AssetStatus.OUT_OF_SERVICE, admin.getAsset(a.getAssetId()).getStatus());
+    }
+
+    @Test
+    void f2MigrationPreflightAndSecondVersionGuards() throws Exception {
+        Asset a = asset("PREFLIGHT");
+        try (var c = operator(); var st = c.createStatement()) {
+            Migrations.availabilityPreflight(c);
+            st.executeUpdate("UPDATE assets SET status='UNDER_MAINTENANCE' WHERE asset_id=" + a.getAssetId());
+            var error = assertThrows(SQLException.class, () -> Migrations.availabilityPreflight(c));
+            assertTrue(error.getMessage().contains(String.valueOf(a.getAssetId())));
+            st.executeUpdate("UPDATE assets SET status='ACTIVE' WHERE asset_id=" + a.getAssetId());
+            var w = assigned(a); technician.startWorkOrder(w.getWorkOrderId());
+            Migrations.availabilityPreflight(c);
+            st.executeUpdate("UPDATE schema_migrations SET status='STARTED' WHERE version=2");
+            try { assertThrows(SQLException.class, () -> Migrations.migrate(c)); }
+            finally { st.executeUpdate("UPDATE schema_migrations SET status='COMPLETE' WHERE version=2"); }
+            st.executeUpdate("UPDATE schema_migrations SET checksum=REPEAT('0',64) WHERE version=2");
+            try { assertThrows(SQLException.class, () -> Migrations.migrate(c)); }
+            finally {
+                try (var p = c.prepareStatement("UPDATE schema_migrations SET checksum=? WHERE version=2")) {
+                    p.setString(1, Migrations.checksum(Migrations.class.getResourceAsStream("/database/V002__availability.sql").readAllBytes())); p.executeUpdate();
+                }
+            }
+            Migrations.migrate(c);
+        }
+        inspection(a, InspectionStatus.FAILED);
+        try (var c = operator()) {
+            assertTrue(assertThrows(SQLException.class, () -> Migrations.availabilityPreflight(c)).getMessage().contains("Historical failed"));
+            Migrations.migrate(c); // Already mapped F2 holds are safe on rerun.
+        }
+    }
+
+    @Test
+    void f2VerificationRollbackPreservesRepairComplaintAndAsset() throws Exception {
+        Asset a = asset("VERIFY-ROLLBACK"); var w = assigned(a);
+        technician.startWorkOrder(w.getWorkOrderId()); technician.completeWorkOrder(w.getWorkOrderId(), "Fixed");
+        try (var c = operator(); var st = c.createStatement()) {
+            st.execute("ALTER TABLE complaints ADD CONSTRAINT f2_reject_resolution CHECK (status <> 'RESOLVED')");
+            try { denied(() -> admin.verifyWorkOrder(w.getWorkOrderId())); }
+            finally { st.execute("ALTER TABLE complaints DROP CHECK f2_reject_resolution"); }
+        }
+        assertEquals(WorkOrderStatus.COMPLETED, admin.getWorkOrder(w.getWorkOrderId()).getStatus());
+        assertEquals(ComplaintStatus.WORK_ORDER_CREATED, admin.getComplaint(w.getComplaint().getComplaintId()).getStatus());
+        assertEquals(AssetStatus.UNDER_MAINTENANCE, admin.getAsset(a.getAssetId()).getStatus());
+        assertEquals(1, admin.getAssetHistory(a.getAssetId()).size());
+    }
+
+    @Test
+    void f2MigratesSupportedLegacyStatesWithoutChangingOperationalIds() throws Exception {
+        Asset active = asset("LEGACY-ACTIVE"), busy = asset("LEGACY-BUSY"), out = asset("LEGACY-OUT"), retired = asset("LEGACY-RETIRED");
+        var w = assigned(busy); technician.startWorkOrder(w.getWorkOrderId()); technician.completeWorkOrder(w.getWorkOrderId(), "Awaiting verification");
+        var pass = inspection(active, InspectionStatus.PASSED);
+        try (var c = operator(); var st = c.createStatement()) {
+            st.executeUpdate("UPDATE assets SET status='OUT_OF_SERVICE' WHERE asset_id=" + out.getAssetId());
+            st.executeUpdate("UPDATE assets SET status='RETIRED' WHERE asset_id=" + retired.getAssetId());
+            // Reconstruct V1 only inside the guarded disposable test schema to exercise actual V2 DDL/data mapping.
+            st.execute("DROP TABLE asset_safety_holds"); st.execute("DROP TABLE asset_lifecycle_history");
+            st.execute("ALTER TABLE assets DROP CHECK chk_manual_lifecycle, DROP COLUMN manual_lifecycle");
+            st.execute("ALTER TABLE asset_inspections DROP COLUMN completed_at");
+            st.executeUpdate("DELETE FROM schema_migrations WHERE version=2");
+            Migrations.migrate(c); Migrations.migrate(c);
+        }
+        assertEquals(ManualLifecycle.ACTIVE, admin.getAsset(active.getAssetId()).getManualLifecycle());
+        assertEquals(ManualLifecycle.ACTIVE, admin.getAsset(busy.getAssetId()).getManualLifecycle());
+        assertEquals(AssetStatus.UNDER_MAINTENANCE, admin.getAsset(busy.getAssetId()).getStatus());
+        assertEquals(ManualLifecycle.OUT_OF_SERVICE, admin.getAsset(out.getAssetId()).getManualLifecycle());
+        assertEquals(ManualLifecycle.RETIRED, admin.getAsset(retired.getAssetId()).getManualLifecycle());
+        assertEquals(w.getComplaint().getComplaintId(), admin.getWorkOrder(w.getWorkOrderId()).getComplaint().getComplaintId());
+        assertEquals(1, admin.getAssetHistory(busy.getAssetId()).size());
+        assertEquals(InspectionStatus.PASSED, admin.getAssetInspection(pass.getInspectionId()).getStatus());
+    }
+
 }
