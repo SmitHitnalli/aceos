@@ -24,3 +24,11 @@
 .queue-value { -fx-font-size: 30px; -fx-font-weight: bold; -fx-text-fill: #1d4ed8; }
 .section-title { -fx-font-size: 17px; -fx-font-weight: bold; }
 .status-label { -fx-text-fill: #172b45; -fx-font-weight: bold; }
+.repair-table { -fx-background-color: white; -fx-border-color: #d5dfeb; -fx-border-radius: 8; -fx-padding: 4; }
+.repair-table .column-header, .repair-table .filler { -fx-background-color: #eaf0fa; -fx-size: 36; }
+.repair-table .table-row-cell { -fx-background-color: white; -fx-cell-size: 36; }
+.repair-table .table-row-cell:odd { -fx-background-color: #f4f7fb; }
+.repair-table .table-row-cell:selected { -fx-background-color: #1d4ed8; }
+.repair-table .table-cell { -fx-text-fill: #172b45; -fx-padding: 8; }
+.repair-table .table-row-cell:selected .table-cell { -fx-text-fill: white; }
+.repair-table:focused { -fx-border-color: #1d4ed8; -fx-border-width: 2; }

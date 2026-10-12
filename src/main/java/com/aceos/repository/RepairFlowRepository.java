@@ -1,0 +1,73 @@
+package com.aceos.repository;
+
+import com.aceos.model.*;
+import com.aceos.security.*;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+/** Called inside the service authorization transaction; scopes precede reconstruction. */
+public final class RepairFlowRepository {
+    public List<User> activeTechnicians() throws SQLException {
+        var result = new ArrayList<User>();
+        try (var p = SecurityRepository.connection().prepareStatement("""
+                SELECT u.* FROM users u JOIN user_accounts a ON a.user_id=u.user_id
+                WHERE u.role='TECHNICIAN' AND a.state='ACTIVE' AND a.must_change=FALSE
+                ORDER BY u.name,u.user_id
+                """); var r = p.executeQuery()) {
+            while (r.next()) result.add(new User(r.getInt("user_id"), r.getString("name"),
+                    r.getString("email"), UserRole.TECHNICIAN));
+        }
+        return result;
+    }
+
+    public RepairDetail detail(Complaint complaint) throws SQLException {
+        WorkOrder work = null;
+        String sql = Scope.filter("SELECT w.work_order_id FROM work_orders w JOIN complaints c ON"
+                + " c.complaint_id=w.complaint_id WHERE c.complaint_id=?", "work_orders", "w");
+        try (var p = SecurityRepository.connection().prepareStatement(sql)) {
+            p.setInt(1, complaint.getComplaintId());
+            try (var r = p.executeQuery()) {
+                if (r.next()) work = new WorkOrderRepository().findById(r.getInt(1)).orElseThrow();
+            }
+        }
+        var events = new ArrayList<RepairDetail.Event>();
+        events.add(new RepairDetail.Event("Complaint reported", complaint.getReportedAt()));
+        // The parent complaint has already passed SQL ownership checks. Only these two
+        // complaint review events are exposed, with no actor/contact or unrelated audit data.
+        try (var p = SecurityRepository.connection().prepareStatement("""
+                SELECT action,recorded_at FROM action_audit WHERE target_id=?
+                AND action IN ('acceptComplaint','rejectComplaint') ORDER BY recorded_at,audit_id
+                """)) {
+            p.setInt(1, complaint.getComplaintId());
+            try (var r = p.executeQuery()) {
+                while (r.next()) events.add(new RepairDetail.Event(
+                        r.getString(1).equals("acceptComplaint") ? "Complaint accepted" : "Complaint rejected",
+                        r.getTimestamp(2).toLocalDateTime()));
+            }
+        }
+        String action = null;
+        if (work != null) {
+            events.add(new RepairDetail.Event("Repair assigned", work.getAssignedAt()));
+            try (var p = SecurityRepository.connection().prepareStatement("""
+                    SELECT recorded_at FROM action_audit WHERE target_id=? AND action='WORK_REASSIGNED'
+                    ORDER BY recorded_at,audit_id
+                    """)) {
+                p.setInt(1, work.getWorkOrderId());
+                try (var r = p.executeQuery()) {
+                    while (r.next()) events.add(new RepairDetail.Event("Repair reassigned", r.getTimestamp(1).toLocalDateTime()));
+                }
+            }
+            if (work.getStartedAt() != null) events.add(new RepairDetail.Event("Repair started", work.getStartedAt()));
+            if (work.getCompletedAt() != null) events.add(new RepairDetail.Event("Repair completed · awaiting verification", work.getCompletedAt()));
+            if (work.getVerifiedAt() != null) events.add(new RepairDetail.Event("Repair verified · complaint resolved", work.getVerifiedAt()));
+            try (var p = SecurityRepository.connection().prepareStatement(
+                    "SELECT action_taken FROM maintenance_records WHERE work_order_id=?")) {
+                p.setInt(1, work.getWorkOrderId());
+                try (var r = p.executeQuery()) { if (r.next()) action = r.getString(1); }
+            }
+        }
+        events.sort(java.util.Comparator.comparing(RepairDetail.Event::at));
+        return new RepairDetail(complaint, work, action, events);
+    }
+}

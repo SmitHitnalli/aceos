@@ -201,7 +201,7 @@ class UiSmokeTest {
                     return null;
                 });
                 Platform.runLater(setup); setup.get(10, TimeUnit.SECONDS);
-                awaitFx(() -> !reference.get().lookup("#dashboard-refresh").isDisabled(), true);
+                awaitControl(reference.get(), "dashboard-refresh");
                 FutureTask<Void> verify = new FutureTask<>(() -> {
                     var workspace = reference.get();
                     snapshot(workspace, size, "phase2-" + role.name().toLowerCase());
@@ -270,7 +270,7 @@ class UiSmokeTest {
             return null;
         });
         Platform.runLater(setup); setup.get(10, TimeUnit.SECONDS); gate.countDown();
-        awaitFx(() -> !reference.get().lookup("#dashboard-refresh").isDisabled(), true);
+        awaitControl(reference.get(), "dashboard-refresh");
         FutureTask<Void> retry = new FutureTask<>(() -> {
             var dashboard = reference.get();
             var button = (javafx.scene.control.Button) dashboard.lookup("#dashboard-refresh");
@@ -283,7 +283,7 @@ class UiSmokeTest {
             return null;
         });
         Platform.runLater(retry); retry.get(10, TimeUnit.SECONDS);
-        awaitFx(() -> !reference.get().lookup("#dashboard-refresh").isDisabled(), true);
+        awaitControl(reference.get(), "dashboard-refresh");
         FutureTask<Void> verify = new FutureTask<>(() -> {
             var dashboard = reference.get();
             assertEquals(2, attempts.get(), "Duplicate refresh must be suppressed");
@@ -295,7 +295,235 @@ class UiSmokeTest {
         Platform.runLater(verify); verify.get(10, TimeUnit.SECONDS);
     }
 
+    private static final class FlowPreview extends AceOsService {
+        final com.aceos.model.UserRole role;
+        final com.aceos.model.Asset asset = new com.aceos.model.Asset(11, "AC-101", "Classroom air conditioner", "Cooling", "Room 101", com.aceos.model.AssetStatus.ACTIVE);
+        final com.aceos.model.User requester = new com.aceos.model.User(3, "Example requester", "requester@aceos.local", com.aceos.model.UserRole.REQUESTER);
+        final com.aceos.model.User technician = new com.aceos.model.User(5, "Example technician", "technician@aceos.local", com.aceos.model.UserRole.TECHNICIAN);
+        volatile com.aceos.model.Complaint complaint;
+        volatile com.aceos.model.WorkOrder work;
+        volatile boolean failWrite, failRead;
+        final java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicInteger reads = new java.util.concurrent.atomic.AtomicInteger();
+        volatile CountDownLatch gate;
+        volatile boolean techniciansAvailable = true;
+        FlowPreview(com.aceos.model.UserRole role, boolean assigned) {
+            this.role = role;
+            complaint = new com.aceos.model.Complaint(42, asset, requester, "Air conditioner is not cooling. Please inspect the cable and compressor.", com.aceos.model.ComplaintPriority.HIGH);
+            if (assigned) { complaint.accept(new com.aceos.model.User(1, "Admin", "admin@aceos.local", com.aceos.model.UserRole.ADMINISTRATOR)); work = new com.aceos.model.WorkOrder(51, complaint, technician); }
+        }
+        void background() { assertFalse(Platform.isFxApplicationThread()); }
+        @Override public com.aceos.model.User signedInUser() { return new com.aceos.model.User(1, "Example user", "example@aceos.local", role); }
+        @Override public java.util.List<com.aceos.model.Asset> getAllAssets() { background(); return java.util.List.of(asset); }
+        @Override public java.util.List<com.aceos.model.User> getActiveTechnicians() { background(); return techniciansAvailable ? java.util.List.of(technician) : java.util.List.of(); }
+        @Override public java.util.List<com.aceos.model.Complaint> getAllComplaints() throws com.aceos.service.AceOsServiceException {
+            background(); reads.incrementAndGet();
+            if (gate != null) try { gate.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { throw new RuntimeException(e); }
+            if (failRead) throw new com.aceos.service.AceOsServiceException("Example read failure");
+            return java.util.List.of(complaint);
+        }
+        @Override public java.util.List<com.aceos.model.WorkOrder> getAllWorkOrders() { background(); return work == null ? java.util.List.of() : java.util.List.of(work); }
+        @Override public com.aceos.model.RepairDetail getRepairDetail(int id) { background(); assertEquals(42, id); return detail(); }
+        @Override public com.aceos.model.RepairDetail getWorkDetail(int id) { background(); assertEquals(51, id); return detail(); }
+        com.aceos.model.RepairDetail detail() {
+            return new com.aceos.model.RepairDetail(complaint, work, work != null && work.getCompletedAt() != null ? "Cable replaced and cooling tested" : null,
+                    java.util.List.of(new com.aceos.model.RepairDetail.Event("Complaint reported", complaint.getReportedAt())));
+        }
+        void write() throws com.aceos.service.AceOsServiceException {
+            background(); writes.incrementAndGet();
+            if (gate != null) try { gate.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { throw new RuntimeException(e); }
+            if (failWrite) throw new com.aceos.service.AceOsServiceException("Example stale action");
+        }
+        @Override public com.aceos.model.MaintenanceRecord completeWorkOrder(int id, String input) throws com.aceos.service.AceOsServiceException {
+            write(); assertEquals("Cable replaced", input); work.complete(); return null;
+        }
+        @Override public com.aceos.model.WorkOrder assignWorkOrder(int id, int technicianId) throws com.aceos.service.AceOsServiceException {
+            write(); assertEquals(42, id); assertEquals(5, technicianId);
+            work = new com.aceos.model.WorkOrder(51, complaint, technician); return work;
+        }
+        @Override public com.aceos.model.WorkOrder verifyWorkOrder(int id) throws com.aceos.service.AceOsServiceException {
+            write(); assertEquals(51, id);
+            work.verify(new com.aceos.model.User(1, "Admin", "admin@aceos.local", com.aceos.model.UserRole.ADMINISTRATOR)); return work;
+        }
+        @Override public com.aceos.model.Complaint submitComplaint(int id, String input, com.aceos.model.ComplaintPriority priority) throws com.aceos.service.AceOsServiceException {
+            write(); assertEquals(11, id); assertEquals("Cooling failure", input); assertEquals(com.aceos.model.ComplaintPriority.HIGH, priority); return complaint;
+        }
+        @Override public com.aceos.model.DashboardSummary getDashboardSummary() {
+            background(); return new com.aceos.model.DashboardSummary(java.util.Map.of(), java.util.List.of(
+                    new com.aceos.model.DashboardSummary.Item(role == com.aceos.model.UserRole.TECHNICIAN ? "Work order" : "Complaint",
+                            role == com.aceos.model.UserRole.TECHNICIAN ? 51 : 42, "AC-101", "SUBMITTED", "Cooling failure")));
+        }
+    }
+
+    private void fx(Callable<Void> operation) throws Exception {
+        FutureTask<Void> task = new FutureTask<>(operation); Platform.runLater(task); task.get(15, TimeUnit.SECONDS);
+    }
+    private void fire(Region root, String id) { ((javafx.scene.control.Button) root.lookup("#" + id)).fire(); }
+
+    private void awaitControl(Region root, String id) throws Exception {
+        awaitFx(() -> {
+            root.applyCss(); root.layout();
+            var control = root.lookup("#" + id);
+            return control != null && !control.isDisabled();
+        }, true);
+    }
+
+    @Test
+    void phase3ConnectedRoleLayoutsAndRecordNavigation() throws Exception {
+        for (var role : com.aceos.model.UserRole.values()) for (int[] size : new int[][] {{800, 520}, {1280, 800}}) {
+            var preview = new FlowPreview(role, role != com.aceos.model.UserRole.ADMINISTRATOR);
+            var reference = new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+            fx(() -> {
+                var workspace = new com.aceos.ui.WorkspaceView(preview, () -> {}, () -> {}); reference.set(workspace);
+                new Scene(workspace, size[0], size[1]); return null;
+            });
+            awaitControl(reference.get(), "dashboard-refresh");
+            fx(() -> { fire(reference.get(), role == com.aceos.model.UserRole.TECHNICIAN ? "dashboard-record-work-order-51" : "dashboard-record-complaint-42"); return null; });
+            awaitControl(reference.get(), "repair-refresh");
+            fx(() -> {
+                var root = reference.get();
+                assertTrue(root.lookup("#repair-detail") != null, "Recent dashboard row opens its exact record");
+                assertEquals(role == com.aceos.model.UserRole.ADMINISTRATOR, root.lookup("#repair-accept") != null);
+                assertEquals(role == com.aceos.model.UserRole.TECHNICIAN, root.lookup("#repair-start") != null);
+                snapshot(root, size, "phase3-detail-" + role.name().toLowerCase());
+                fire(root, "repair-back"); return null;
+            });
+            awaitControl(reference.get(), "repair-refresh");
+            fx(() -> {
+                var root = reference.get(); var table = (javafx.scene.control.TableView<?>) root.lookup("#repair-table");
+                assertEquals(1, table.getItems().size());
+                ((javafx.scene.control.TextField) root.lookup("#repair-search")).setText("no matching record");
+                assertTrue(table.getItems().isEmpty());
+                ((javafx.scene.control.TextField) root.lookup("#repair-search")).clear();
+                var status = (javafx.scene.control.ComboBox<String>) root.lookup("#repair-status");
+                status.setValue(role == com.aceos.model.UserRole.TECHNICIAN ? "VERIFIED" : "REJECTED");
+                assertTrue(table.getItems().isEmpty());
+                status.setValue("ALL"); assertEquals(1, table.getItems().size());
+                table.getSelectionModel().selectFirst();
+                table.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", javafx.scene.input.KeyCode.ENTER, false, false, false, false));
+                return null;
+            });
+            awaitControl(reference.get(), "repair-refresh");
+            fx(() -> { assertNotNull(reference.get().lookup("#repair-detail")); return null; });
+        }
+    }
+
+    @Test
+    void phase3CompletionFailureRetainsInputAndBlocksStaleDuplicateActions() throws Exception {
+        var preview = new FlowPreview(com.aceos.model.UserRole.TECHNICIAN, true); preview.work.start(); preview.failWrite = true;
+        var reference = new java.util.concurrent.atomic.AtomicReference<RepairFlowView>();
+        fx(() -> { var root = new RepairFlowView(preview, true, null, 51); reference.set(root); new Scene(root, 800, 520); return null; });
+        awaitControl(reference.get(), "repair-refresh");
+        preview.gate = new CountDownLatch(1);
+        fx(() -> {
+            var root = reference.get(); ((javafx.scene.control.TextArea) root.lookup("#repair-completion")).setText("Cable replaced");
+            fire(root, "repair-complete"); fire(root, "repair-complete");
+            assertTrue(root.lookup("#repair-complete").isDisabled()); assertTrue(root.lookup("#repair-refresh").isDisabled()); return null;
+        });
+        preview.gate.countDown();
+        awaitControl(reference.get(), "repair-refresh");
+        fx(() -> {
+            var root = reference.get(); assertEquals(1, preview.writes.get());
+            assertEquals("Cable replaced", ((javafx.scene.control.TextArea) root.lookup("#repair-completion")).getText());
+            assertTrue(root.lookup("#repair-complete").isDisabled());
+            assertTrue(((javafx.scene.control.Label) root.lookup("#repair-feedback")).getText().contains("Example stale action"));
+            fire(root, "repair-refresh"); return null;
+        });
+        awaitControl(reference.get(), "repair-refresh");
+        preview.failWrite = false;
+        fx(() -> { assertFalse(reference.get().lookup("#repair-complete").isDisabled()); fire(reference.get(), "repair-complete"); return null; });
+        awaitControl(reference.get(), "repair-refresh");
+        fx(() -> { assertEquals(2, preview.writes.get()); assertNull(reference.get().lookup("#repair-complete")); return null; });
+    }
+
+    @Test
+    void phase3ReportSearchRecoveryAndListRetry() throws Exception {
+        var preview = new FlowPreview(com.aceos.model.UserRole.REQUESTER, false); preview.failWrite = true;
+        var reference = new java.util.concurrent.atomic.AtomicReference<ComplaintManagementView>();
+        fx(() -> { var root = new ComplaintManagementView(preview); reference.set(root); new Scene(root, 1280, 800); return null; });
+        awaitControl(reference.get(), "report-refresh");
+        fx(() -> {
+            var root = reference.get();
+            var search = (javafx.scene.control.TextField) root.lookup("#report-asset-search"); search.setText("Room 101");
+            var choices = (javafx.scene.control.ComboBox<?>) root.lookup("#report-asset-choice"); assertEquals(1, choices.getItems().size()); choices.getSelectionModel().selectFirst();
+            ((javafx.scene.control.TextArea) root.lookup("#report-description")).setText("Cooling failure");
+            ((javafx.scene.control.ComboBox<com.aceos.model.ComplaintPriority>) root.lookup("#report-priority")).setValue(com.aceos.model.ComplaintPriority.HIGH);
+            snapshot(root, new int[] {1280, 800}, "phase3-report");
+            fire(root, "report-submit"); fire(root, "report-submit"); return null;
+        });
+        awaitControl(reference.get(), "report-submit");
+        fx(() -> {
+            var root = reference.get(); assertEquals(1, preview.writes.get());
+            assertEquals("Cooling failure", ((javafx.scene.control.TextArea) root.lookup("#report-description")).getText());
+            assertNotNull(((javafx.scene.control.ComboBox<?>) root.lookup("#report-asset-choice")).getValue());
+            return null;
+        });
+        preview.failWrite = false;
+        fx(() -> { fire(reference.get(), "report-submit"); return null; });
+        awaitControl(reference.get(), "report-submit");
+        fx(() -> { assertTrue(((javafx.scene.control.TextArea) reference.get().lookup("#report-description")).getText().isEmpty()); assertTrue(reference.get().lookup("#report-progress").isVisible()); return null; });
+        preview.failRead = true; preview.gate = new CountDownLatch(1);
+        var list = new java.util.concurrent.atomic.AtomicReference<RepairFlowView>();
+        fx(() -> { var root = new RepairFlowView(preview, false, null); list.set(root); new Scene(root, 800, 520); root.applyCss(); root.layout(); fire(root, "repair-refresh"); return null; });
+        preview.gate.countDown();
+        awaitControl(list.get(), "repair-refresh");
+        fx(() -> { assertEquals(1, preview.reads.get()); assertEquals("Retry", ((javafx.scene.control.Button) list.get().lookup("#repair-refresh")).getText()); return null; });
+        preview.failRead = false;
+        fx(() -> { fire(list.get(), "repair-refresh"); fire(list.get(), "repair-refresh"); return null; });
+        awaitControl(list.get(), "repair-refresh");
+        fx(() -> { assertEquals(2, preview.reads.get()); assertEquals(1, ((javafx.scene.control.TableView<?>) list.get().lookup("#repair-table")).getItems().size()); snapshot(list.get(), new int[] {800, 520}, "phase3-list"); return null; });
+    }
+
+    @Test
+    void phase3AssignmentVerificationAndScrollableForms() throws Exception {
+        for (int[] size : new int[][] {{800, 520}, {1280, 800}}) {
+            var preview = new FlowPreview(com.aceos.model.UserRole.ADMINISTRATOR, false);
+            preview.complaint.accept(preview.signedInUser());
+            var reference = new java.util.concurrent.atomic.AtomicReference<RepairFlowView>();
+            fx(() -> { var root = new RepairFlowView(preview, false, null, 42); reference.set(root); new Scene(root, size[0], size[1]); return null; });
+            awaitControl(reference.get(), "repair-refresh");
+            fx(() -> {
+                var root = reference.get();
+                var search = (javafx.scene.control.TextField) root.lookup("#repair-technician-search"); search.setText("technician@aceos");
+                var choice = (javafx.scene.control.ComboBox<?>) root.lookup("#repair-technician-choice");
+                assertEquals(1, choice.getItems().size()); choice.getSelectionModel().selectFirst();
+                snapshot(root, size, "phase3-assignment-top", true);
+                root.setVvalue(1); root.layout();
+                snapshot(root, size, "phase3-assignment-bottom", true);
+                var button = root.lookup("#repair-assign"); var bounds = button.localToScene(button.getBoundsInLocal());
+                assertTrue(bounds.getMinY() >= 0 && bounds.getMaxY() <= size[1], "Assignment action is reachable by scrolling");
+                assertTrue(button.isFocusTraversable()); fire(root, "repair-assign"); return null;
+            });
+            awaitControl(reference.get(), "repair-refresh");
+            fx(() -> { assertEquals(1, preview.writes.get()); assertEquals(com.aceos.model.WorkOrderStatus.ASSIGNED, preview.work.getStatus()); return null; });
+            preview.work.start(); preview.work.complete();
+            fx(() -> { fire(reference.get(), "repair-refresh"); return null; });
+            awaitControl(reference.get(), "repair-refresh");
+            fx(() -> { assertNotNull(reference.get().lookup("#repair-verify")); fire(reference.get(), "repair-verify"); return null; });
+            awaitControl(reference.get(), "repair-refresh");
+            fx(() -> { assertEquals(com.aceos.model.ComplaintStatus.RESOLVED, preview.complaint.getStatus()); assertNull(reference.get().lookup("#repair-verify")); return null; });
+            var empty = new FlowPreview(com.aceos.model.UserRole.ADMINISTRATOR, false);
+            empty.complaint.accept(empty.signedInUser()); empty.techniciansAvailable = false;
+            fx(() -> { var root = new RepairFlowView(empty, false, null, 42); reference.set(root); new Scene(root, size[0], size[1]); return null; });
+            awaitControl(reference.get(), "repair-refresh");
+            fx(() -> { assertTrue(reference.get().lookup("#repair-assign").isDisabled()); return null; });
+            var report = new java.util.concurrent.atomic.AtomicReference<ComplaintManagementView>();
+            fx(() -> { var root = new ComplaintManagementView(new FlowPreview(com.aceos.model.UserRole.REQUESTER, false)); report.set(root); new Scene(root, size[0], size[1]); return null; });
+            awaitControl(report.get(), "report-refresh");
+            fx(() -> {
+                var root = report.get(); snapshot(root, size, "phase3-report-top", true);
+                root.setVvalue(1); root.layout(); snapshot(root, size, "phase3-report-bottom", true);
+                var button = root.lookup("#report-submit"); var bounds = button.localToScene(button.getBoundsInLocal());
+                assertTrue(bounds.getMinY() >= 0 && bounds.getMaxY() <= size[1], "Submission action is reachable by scrolling"); return null;
+            });
+        }
+    }
+
     private void snapshot(Region root, int[] size, String name) throws Exception {
+        snapshot(root, size, name, false);
+    }
+
+    private void snapshot(Region root, int[] size, String name, boolean scrollable) throws Exception {
         Scene scene = root.getScene() == null ? new Scene(root, size[0], size[1]) : root.getScene();
         scene.getStylesheets()
                 .add(getClass().getResource("/com/aceos/ui/foundation.css").toExternalForm());
@@ -305,7 +533,7 @@ class UiSmokeTest {
         for (var node : root.lookupAll(".text-input")) {
             var bounds = node.localToScene(node.getBoundsInLocal());
             assertTrue(bounds.getMinX() >= 0 && bounds.getMaxX() <= size[0]);
-            assertTrue(
+            if (!scrollable) assertTrue(
                     bounds.getMinY() >= 0 && bounds.getMaxY() <= size[1],
                     name + " fields should fit");
         }

@@ -1,6 +1,6 @@
 # F1/F2 local foundation
 
-F1/F2 and Phase 2 shell/role dashboards are implemented on `codex/role-based-foundation`. The published release remains v1.0.0; the next version number is undecided. Java 24, JavaFX 24.0.2, JDBC and MySQL remain the architecture. Connected screens are Phase 3; deployment is last.
+F1/F2, Phase 2 shell/role dashboards and the first Phase 3 complaint-to-repair chunk are implemented on `codex/role-based-foundation`. The published release remains v1.0.0; the next version number is undecided. Java 24, JavaFX 24.0.2, JDBC and MySQL remain the architecture. AceOS is a local college project; deployment, pre-deployment preparation, hosting/shared-backend work and production-only features are excluded.
 
 ## Accounts and authentication
 
@@ -30,7 +30,7 @@ Service checks apply to lists, individual lookups and writes. Read scopes are ap
 
 All service operations validate sessions and use the same transaction as repository writes/audit. READ COMMITTED prevents an early schema read from retaining a stale snapshot while waiting for a lock. Transaction-bound asset locks coordinate availability changes. A single security coordination row serializes local service operations to protect role/reset/deactivation races. This intentionally simple local mechanism prioritizes correctness; larger-scale concurrency is future work. SQL remains in repositories/security persistence helpers, never JavaFX views. Database calls run on background virtual threads, with UI callbacks on the JavaFX thread; input is retained on failure.
 
-The trusted local client and its service checks are the enforcement boundary for this milestone. Someone possessing database credentials or modifying the desktop client can bypass Java checks. This is not a secure remote multi-user deployment. Establish a trusted backend/enforcement boundary before deployment.
+The trusted local client and its service checks are the enforcement boundary. Someone possessing database credentials or modifying the desktop client can bypass Java checks. This limitation describes the local academic application; remote enforcement/backend work is outside its scope.
 
 ## Fresh isolated setup
 
@@ -97,10 +97,14 @@ Administrator navigation includes **Asset Availability** for ID-based loading, l
 
 **F2 verification (2026-10-12):** 25 distinct relevant checks passed across focused runs: 21 database, 3 password/session and 1 F2 JavaFX check. Coverage includes overlapping completion/verification orders, failure during repair, independent holds, role denial, same-asset/later evidence and backdated evidence rejection, manual stop/retirement/stale changes, concurrent verification/failure, linked-write rollback, real V1→V2 supported mapping, rerun/checksum/interruption and preserved IDs/history/scoped totals. F2 snapshots/input recovery passed at 800×520 and 1280×800; unchanged F1 UI captures were not repeated. Both ignored pre-F2 development/test backups restored into disposable schemas; user/account/migration checksums matched before migration. V002 applied/reran on only the isolated schemas; development account data remains pending private bootstrap. Human checks remain private sign-in and live-window keyboard/screen-reader/action feedback; snapshots use controlled display fixtures, not dev logins.
 
-## Next chunk
+## Connected complaint-to-repair screens
 
-Phase 2 shell and three role dashboards are implemented and locally verified. Role-specific queues and bounded recent progress load through one authorized background service operation. Actions open existing scoped screens; ID entry remains until Phase 3. The shell includes active navigation, collapsible small-window menus, account/logout and a 120ms fade disabled by Reduce motion or the `aceos.reducedMotion` JVM property.
+Phase 2 queues and bounded recent progress load through one authorized background service operation. Complaint/repair rows now open their exact scoped details. Review, assignment and verification shortcuts open filtered connected lists. The shell includes active navigation, collapsible small-window menus, account/logout and a 120ms fade disabled by Reduce motion or the `aceos.reducedMotion` JVM property.
 
 Four focused Phase 2 checks passed (two database, two JavaFX; zero failures/errors/skips) with packaging. Coverage includes ownership before bounded retrieval, queue/workflow transitions, overdue scheduled work, safety holds surviving verification, anonymous/logout denials, dashboard destinations and forbidden navigation, account/logout, active navigation, 800×520 and 1280×800 layouts, reduced-motion cancellation, background loading, duplicate refresh and error/retry/empty recovery. Unchanged F1/F2 checks were not repeated. Controlled snapshots do not complete private development sign-in or human keyboard/screen-reader/live-window feedback checks.
 
-Review Phase 3 connected lists/details/actions, searchable selectors, complaint/work timelines and asset profiles/history next; wait for its separate go-ahead. Apply the approved visual direction across those existing screens. No deployment or new release/tag during Phase 2.
+The first Phase 3 chunk adds searchable authorized non-retired reporting assets and active technicians, complaint/repair lists with row/Enter opening, complaint/work timelines, maintenance text and actions from details. Existing review/assignment/start/completion/verification services continue to enforce roles, ownership and current state. Failure retains form input; failed actions require refreshed details before retry. Timelines use persisted review audit entries and work timestamps, without inventing missing historical events. Scoped projections do not expose unrelated complaints or repair records.
+
+Six focused Phase 3 checks passed (two database, four JavaFX; zero failures/errors/skips) plus packaging. They cover detail ownership/session denial, timeline/workflow transitions, stale actions and technician choices, reporting eligibility, hold preservation, exact-record dashboard/row/Enter navigation, selectors, assignment/verification, no-technician states, duplicate protection and retained input/retry. Both supported sizes include scrollable form/action reachability. Controlled snapshots were reviewed; private bootstrap/sign-in and human keyboard/screen-reader/live-window feedback remain outstanding. Unchanged F1/F2 checks were not repeated.
+
+Next: review asset profiles/history and supporting management-screen refresh as a separate bounded Phase 3 chunk. Edit/archive semantics, cancellation/reopening/repair-return and advanced workflows require later scope decisions. No deployment or new release/tag.

@@ -17,6 +17,7 @@ import java.util.function.Consumer;
 public class DashboardView extends ScrollPane {
     private final AceOsService service;
     private final Consumer<String> navigate;
+    private final java.util.function.BiConsumer<String, Integer> openRecord;
     private final Map<String, Label> values = new LinkedHashMap<>();
     private final VBox updates = new VBox(12);
     private final Label feedback = new Label();
@@ -24,8 +25,14 @@ public class DashboardView extends ScrollPane {
     private final UserRole role;
 
     public DashboardView(AceOsService service, Consumer<String> navigate) throws AceOsServiceException {
+        this(service, navigate, null);
+    }
+
+    public DashboardView(AceOsService service, Consumer<String> navigate,
+            java.util.function.BiConsumer<String, Integer> openRecord) throws AceOsServiceException {
         this.service = service;
         this.navigate = navigate;
+        this.openRecord = openRecord;
         role = service.signedInUser().getRole();
         setId("role-dashboard");
         getStyleClass().add("dashboard");
@@ -160,11 +167,15 @@ public class DashboardView extends ScrollPane {
                     : role == UserRole.TECHNICIAN ? "maintenance"
                     : role == UserRole.ADMINISTRATOR ? "review" : "complaints";
             if (item.status().equals("COMPLETED")) route = "jobs";
+            Button open = action(role == UserRole.REQUESTER ? "View complaint progress" : "Open " + item.kind().toLowerCase(), route, false);
+            open.setId("dashboard-record-" + item.kind().toLowerCase().replace(' ', '-') + "-" + item.id());
+            if (openRecord != null && !item.kind().equals("Inspection"))
+                open.setOnAction(e -> openRecord.accept(item.kind(), item.id()));
             VBox row = new VBox(8,
                     label(item.kind() + " #" + item.id() + " · " + item.asset(), "section-title"),
                     label(readableStatus(item.status()), "status-label"),
                     label(item.detail(), "muted"),
-                    action(role == UserRole.REQUESTER ? "View complaint progress" : "Open " + item.kind().toLowerCase() + " screen", route, false));
+                    open);
             row.getStyleClass().add("dashboard-card");
             updates.getChildren().add(row);
         }
@@ -176,7 +187,7 @@ public class DashboardView extends ScrollPane {
         return switch (status) {
             case "SUBMITTED" -> "Awaiting administrator review";
             case "ACCEPTED" -> "Accepted · awaiting technician assignment";
-            case "WORK_ORDER_CREATED" -> "Repair assigned · view work orders for repair progress";
+            case "WORK_ORDER_CREATED" -> "Repair assigned · open progress for details";
             case "RESOLVED" -> "Repair verified · complaint resolved";
             case "REJECTED" -> "Complaint rejected";
             case "COMPLETED" -> "Repair completed · awaiting administrator verification";

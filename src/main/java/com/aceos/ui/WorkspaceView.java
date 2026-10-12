@@ -78,29 +78,29 @@ public final class WorkspaceView extends BorderPane {
         navigationScroll.setMinWidth(216);
         add("dashboard", "Dashboard", () -> dashboard(service));
         if (role == UserRole.REQUESTER) {
-            add("report", "Report complaint", () -> new ComplaintManagementView(service));
-            add("complaints", "My complaints", () -> new ComplaintDirectoryView(service));
-            add("jobs", "Repair progress", () -> new WorkOrderDirectoryView(service));
+            add("report", "Report complaint", () -> new ComplaintManagementView(service, id -> openRepair(service, false, id)));
+            add("complaints", "My complaints", () -> new RepairFlowView(service, false, null));
+            add("jobs", "Repair progress", () -> new RepairFlowView(service, true, null));
             add("assets", "Reporting assets", () -> new AssetDirectoryView(service));
         } else if (role == UserRole.TECHNICIAN) {
-            add("maintenance", "My maintenance", () -> new WorkOrderLifecycleView(service));
-            add("jobs", "Assigned jobs", () -> new WorkOrderDirectoryView(service));
+            add("maintenance", "My maintenance", () -> new RepairFlowView(service, true, null));
+            add("jobs", "Assigned jobs", () -> new RepairFlowView(service, true, null));
             add("complete-inspection", "Complete inspection", () -> new AssetInspectionManagementView(service));
             add("inspections", "Assigned inspections", () -> new AssetInspectionDirectoryView(service));
-            add("complaints", "Linked complaints", () -> new ComplaintDirectoryView(service));
+            add("complaints", "Linked complaints", () -> new RepairFlowView(service, false, null));
             add("assets", "Assigned assets", () -> new AssetDirectoryView(service));
         } else {
-            add("review", "Review complaints", () -> new ComplaintReviewView(service));
-            add("assign", "Assign work", () -> new WorkOrderManagementView(service));
-            add("verify", "Verify maintenance", () -> new WorkOrderVerificationView(service));
+            add("review", "Review complaints", () -> new RepairFlowView(service, false, "SUBMITTED"));
+            add("assign", "Assign work", () -> new RepairFlowView(service, false, "ACCEPTED"));
+            add("verify", "Verify maintenance", () -> new RepairFlowView(service, true, "COMPLETED"));
             add("assignments", "Assignments", () -> new AssignmentView(service));
             add("availability", "Asset availability", () -> new AssetAvailabilityView(service));
             add("schedules", "Manage schedules", () -> new PreventiveMaintenanceManagementView(service));
             add("schedule-inspection", "Schedule inspections", () -> new AssetInspectionManagementView(service));
             add("inspections", "Inspection directory", () -> new AssetInspectionDirectoryView(service));
             add("schedule-directory", "Schedule directory", () -> new PreventiveMaintenanceDirectoryView(service));
-            add("complaints", "Complaint directory", () -> new ComplaintDirectoryView(service));
-            add("jobs", "Work order directory", () -> new WorkOrderDirectoryView(service));
+            add("complaints", "Complaint directory", () -> new RepairFlowView(service, false, null));
+            add("jobs", "Work order directory", () -> new RepairFlowView(service, true, null));
             add("assets", "Asset directory", () -> new AssetDirectoryView(service));
             add("register", "Register assets", () -> new AssetManagementView(service));
             add("accounts", "Accounts", () -> new AccountManagementView(service));
@@ -119,13 +119,19 @@ public final class WorkspaceView extends BorderPane {
 
     private Node dashboard(AceOsService service) {
         try {
-            return new DashboardView(service, this::navigate);
+            return new DashboardView(service, this::navigate, (kind, id) -> openRepair(service, kind.equals("Work order"), id));
         } catch (AceOsServiceException e) {
             Label error = new Label(e.getMessage() + " Sign out and sign in again.");
             error.setWrapText(true);
             error.getStyleClass().add("error");
             return new VBox(16, error);
         }
+    }
+
+    private void openRepair(AceOsService service, boolean work, int id) {
+        String route = work ? "jobs" : "complaints";
+        select(route, work ? "Repair progress" : "Complaint progress", new RepairFlowView(service, work, null, id));
+        if (narrow) setMenuVisible(false);
     }
 
     private void add(String key, String text, Supplier<Node> view) {

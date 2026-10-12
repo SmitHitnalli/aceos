@@ -183,6 +183,76 @@ class FoundationTest {
     }
 
     @Test
+    void connectedRepairDetailsPreserveOwnershipTimelineAndHolds() throws Exception {
+        var a = asset("CONNECTED");
+        var own = complaint(requester, a);
+        var foreign = complaint(otherRequester, a);
+        denied(() -> otherRequester.getRepairDetail(own.getComplaintId()));
+        denied(() -> technician.getRepairDetail(own.getComplaintId()));
+        assertNull(requester.getRepairDetail(own.getComplaintId()).work());
+        assertEquals(1, requester.getRepairDetail(own.getComplaintId()).timeline().size());
+        admin.acceptComplaint(own.getComplaintId());
+        assertTrue(requester.getRepairDetail(own.getComplaintId()).timeline().stream()
+                .anyMatch(e -> e.description().equals("Complaint accepted")));
+        denied(() -> admin.acceptComplaint(own.getComplaintId()));
+        var w = admin.assignWorkOrder(own.getComplaintId(), 5);
+        denied(() -> otherTechnician.getWorkDetail(w.getWorkOrderId()));
+        denied(() -> otherRequester.getWorkDetail(w.getWorkOrderId()));
+        assertEquals(w.getWorkOrderId(), requester.getRepairDetail(own.getComplaintId()).work().getWorkOrderId());
+        assertEquals(own.getComplaintId(), technician.getWorkDetail(w.getWorkOrderId()).complaint().getComplaintId());
+        admin.reassignWorkOrder(w.getWorkOrderId(), 6);
+        denied(() -> technician.getRepairDetail(own.getComplaintId()));
+        assertTrue(otherTechnician.getWorkDetail(w.getWorkOrderId()).timeline().stream()
+                .anyMatch(e -> e.description().equals("Repair reassigned")));
+        otherTechnician.startWorkOrder(w.getWorkOrderId());
+        denied(() -> admin.reassignWorkOrder(w.getWorkOrderId(), 5));
+        otherTechnician.completeWorkOrder(w.getWorkOrderId(), "Replaced the damaged cable");
+        denied(() -> otherTechnician.completeWorkOrder(w.getWorkOrderId(), "Duplicate"));
+        var completed = requester.getWorkDetail(w.getWorkOrderId());
+        assertEquals("Replaced the damaged cable", completed.actionTaken());
+        assertEquals(WorkOrderStatus.COMPLETED, completed.work().getStatus());
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.OUT_OF_SERVICE, "Independent hold");
+        admin.verifyWorkOrder(w.getWorkOrderId());
+        denied(() -> admin.verifyWorkOrder(w.getWorkOrderId()));
+        var resolved = requester.getRepairDetail(own.getComplaintId());
+        assertEquals(ComplaintStatus.RESOLVED, resolved.complaint().getStatus());
+        assertEquals(AssetStatus.OUT_OF_SERVICE, resolved.complaint().getAsset().getStatus());
+        assertEquals(7, resolved.timeline().size());
+        assertEquals(WorkOrderStatus.VERIFIED, resolved.work().getStatus());
+        assertNull(otherRequester.getRepairDetail(foreign.getComplaintId()).actionTaken());
+        assertTrue(otherRequester.getRepairDetail(foreign.getComplaintId()).timeline().stream()
+                .noneMatch(e -> e.description().contains("Repair")));
+        var rejected = complaint(otherRequester, a);
+        admin.rejectComplaint(rejected.getComplaintId());
+        assertTrue(otherRequester.getRepairDetail(rejected.getComplaintId()).timeline().stream()
+                .anyMatch(e -> e.description().equals("Complaint rejected")));
+        denied(() -> new AceOsService().getRepairDetail(own.getComplaintId()));
+        denied(() -> new AceOsService().getWorkDetail(w.getWorkOrderId()));
+        requester.signOut(); denied(() -> requester.getRepairDetail(own.getComplaintId()));
+    }
+
+    @Test
+    void connectedSelectorsExcludeRetiredAndInactiveAccountsAndRevalidateStaleChoices() throws Exception {
+        var a = asset("REPORTABLE"); var retired = asset("RETIRED-CHOICE");
+        admin.changeAssetLifecycle(retired.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.RETIRED, "Unused");
+        assertEquals(List.of(a.getAssetId()), requester.getAllAssets().stream().map(Asset::getAssetId).toList());
+        denied(() -> complaint(requester, retired));
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.OUT_OF_SERVICE, "Hold");
+        var c = complaint(requester, a);
+        admin.acceptComplaint(c.getComplaintId());
+        assertEquals(Set.of(5, 6), new HashSet<>(admin.getActiveTechnicians().stream().map(User::getUserId).toList()));
+        denied(requester::getActiveTechnicians); denied(technician::getActiveTechnicians);
+        admin.deactivateAccount(6);
+        assertEquals(List.of(5), admin.getActiveTechnicians().stream().map(User::getUserId).toList());
+        denied(() -> admin.assignWorkOrder(c.getComplaintId(), 6));
+        admin.issueCredential(5);
+        assertTrue(admin.getActiveTechnicians().isEmpty());
+        denied(() -> admin.assignWorkOrder(c.getComplaintId(), 5));
+        denied(() -> new AceOsService().getActiveTechnicians());
+        admin.signOut(); denied(admin::getActiveTechnicians);
+    }
+
+    @Test
     void dashboardRecentRowsAreBoundedAfterOwnershipFilter() throws Exception {
         var a = asset("RECENT");
         for (int i = 0; i < 8; i++) complaint(requester, a);

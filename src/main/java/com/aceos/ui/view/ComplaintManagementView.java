@@ -1,143 +1,81 @@
 package com.aceos.ui.view;
 
-import com.aceos.model.ComplaintPriority;
+import com.aceos.model.*;
 import com.aceos.service.AceOsService;
-import com.aceos.service.AceOsServiceException;
-
+import com.aceos.ui.FxTasks;
 import javafx.geometry.Insets;
-import javafx.scene.control.Button;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+import java.util.function.IntConsumer;
 
-public class ComplaintManagementView extends VBox {
+public class ComplaintManagementView extends ScrollPane {
+    private final AceOsService service;
+    private final SearchSelector<Asset> assets = new SearchSelector<>("Asset", "report-asset",
+            a -> a.getAssetCode() + " · " + a.getName() + " · " + a.getLocation() + " · " + a.getStatus(), Asset::getAssetId);
+    private final Button refresh = new Button("Refresh assets");
+    private final Button submit = new Button("Submit complaint");
+    private final TextArea description = new TextArea();
+    private final ComboBox<ComplaintPriority> priority = new ComboBox<>();
+    private final Label feedback = new Label();
+    private final Button progress = new Button("View submitted complaint");
+    private boolean busy;
 
-    public ComplaintManagementView(AceOsService service) {
-        setSpacing(20);
-        setPadding(new Insets(40));
-        setMaxWidth(720);
+    public ComplaintManagementView(AceOsService service) { this(service, id -> {}); }
 
-        Label title = new Label("Complaint Management");
-        title.setStyle(
-                "-fx-font-size: 28px;" + "-fx-font-weight: bold;" + "-fx-text-fill: #1e293b;");
-
-        Label description =
-                new Label("Submit a maintenance complaint " + "for a registered asset.");
-        description.setStyle("-fx-font-size: 15px;" + "-fx-text-fill: #475569;");
-
-        TextField assetIdField = new TextField();
-        assetIdField.setPromptText("Enter the asset ID");
-
-        TextArea complaintDescriptionField = new TextArea();
-        complaintDescriptionField.setPromptText("Describe the maintenance problem");
-        complaintDescriptionField.setPrefRowCount(5);
-        complaintDescriptionField.setWrapText(true);
-
-        ComboBox<ComplaintPriority> priorityBox = new ComboBox<>();
-        priorityBox.getItems().addAll(ComplaintPriority.values());
-        priorityBox.setPromptText("Select a priority");
-        priorityBox.setMaxWidth(Double.MAX_VALUE);
-
-        GridPane form = new GridPane();
-        form.setHgap(16);
-        form.setVgap(16);
-
-        form.add(new Label("Asset ID"), 0, 0);
-        form.add(assetIdField, 1, 0);
-
-        form.add(new Label("Description"), 0, 2);
-        form.add(complaintDescriptionField, 1, 2);
-
-        form.add(new Label("Priority"), 0, 3);
-        form.add(priorityBox, 1, 3);
-
-        GridPane.setHgrow(assetIdField, Priority.ALWAYS);
-
-        GridPane.setHgrow(complaintDescriptionField, Priority.ALWAYS);
-        GridPane.setHgrow(priorityBox, Priority.ALWAYS);
-
-        Button submitButton = new Button("Submit Complaint");
-        submitButton.setMinHeight(40);
-
-        Label statusLabel = new Label();
-        statusLabel.setWrapText(true);
-
-        submitButton.setOnAction(
-                event ->
-                        submitComplaint(
-                                service,
-                                assetIdField,
-                                complaintDescriptionField,
-                                priorityBox,
-                                submitButton,
-                                statusLabel));
-
-        getChildren().addAll(title, description, form, submitButton, statusLabel);
+    public ComplaintManagementView(AceOsService service, IntConsumer openComplaint) {
+        this.service = service;
+        setId("complaint-report"); setFitToWidth(true);
+        VBox content = new VBox(16); content.setPadding(new Insets(24)); content.setMinWidth(0);
+        Label title = new Label("Report a complaint"); title.getStyleClass().add("title");
+        Label help = new Label("Choose a non-retired asset and describe the problem. Assets under repair or on hold can still be reported.");
+        help.setWrapText(true); help.getStyleClass().add("muted");
+        refresh.setId("report-refresh"); refresh.setOnAction(e -> loadAssets());
+        description.setId("report-description"); description.setPromptText("Describe the maintenance problem");
+        description.setWrapText(true); description.setPrefRowCount(3);
+        Label descriptionLabel = new Label("Problem description"); descriptionLabel.setLabelFor(description);
+        priority.setId("report-priority"); priority.getItems().setAll(ComplaintPriority.values());
+        priority.setPromptText("Choose priority"); priority.setMaxWidth(Double.MAX_VALUE);
+        Label priorityLabel = new Label("Priority"); priorityLabel.setLabelFor(priority);
+        VBox form = new VBox(8, assets, refresh, descriptionLabel, description, priorityLabel, priority);
+        form.getStyleClass().add("dashboard-card");
+        submit.setId("report-submit"); submit.getStyleClass().add("primary");
+        feedback.setId("report-feedback"); feedback.setWrapText(true);
+        progress.setId("report-progress"); progress.setVisible(false); progress.setManaged(false);
+        submit.setOnAction(e -> {
+            if (busy) return;
+            Asset asset = assets.selected();
+            if (asset == null || description.getText().isBlank() || priority.getValue() == null) {
+                message("Choose an asset, describe the problem and select a priority.", true); return;
+            }
+            int id = asset.getAssetId(); String text = description.getText(); var selectedPriority = priority.getValue();
+            busy = true; form.setDisable(true); submit.setDisable(true); progress.setDisable(true);
+            message("Submitting complaint…", false);
+            FxTasks.run(() -> service.submitComplaint(id, text, selectedPriority), result -> {
+                message("Complaint #" + result.getComplaintId() + " submitted. Awaiting administrator review.", false);
+                description.clear(); priority.setValue(null); assets.clear();
+                progress.setVisible(true); progress.setManaged(true);
+                progress.setOnAction(event -> openComplaint.accept(result.getComplaintId()));
+            }, error -> message(error.getMessage() + " Your input is retained; refresh assets if needed and retry.", true),
+                    () -> { busy = false; form.setDisable(false); progress.setDisable(false); submit.setDisable(assets.isEmpty()); });
+        });
+        content.getChildren().addAll(title, help, form, submit, feedback, progress);
+        setContent(content); loadAssets();
     }
 
-    private void submitComplaint(
-            AceOsService service,
-            TextField assetIdField,
-            TextArea complaintDescriptionField,
-            ComboBox<ComplaintPriority> priorityBox,
-            Button submitButton,
-            Label statusLabel) {
-        submitButton.setDisable(true);
-
-        try {
-            int assetId = parseId(assetIdField.getText(), "Asset");
-
-            var input1 = complaintDescriptionField.getText();
-            var input2 = priorityBox.getValue();
-            com.aceos.ui.FxTasks.run(
-                    () -> service.submitComplaint(assetId, input1, input2),
-                    submittedComplaint -> {
-                        statusLabel.setStyle("-fx-text-fill: #15803d;");
-                        statusLabel.setText(
-                                "Submitted complaint #"
-                                        + submittedComplaint.getComplaintId()
-                                        + " for asset "
-                                        + submittedComplaint.getAsset().getAssetCode()
-                                        + " ("
-                                        + submittedComplaint.getPriority()
-                                        + ", "
-                                        + submittedComplaint.getStatus()
-                                        + ")");
-
-                        assetIdField.clear();
-
-                        complaintDescriptionField.clear();
-                        priorityBox.getSelectionModel().clearSelection();
-                        assetIdField.requestFocus();
-                    },
-                    exception -> {
-                        statusLabel.setStyle("-fx-text-fill: #b91c1c;");
-                        statusLabel.setText(exception.getMessage());
-                    },
-                    () -> {
-                        submitButton.setDisable(false);
-                    });
-        } catch (AceOsServiceException exception) {
-            statusLabel.setStyle("-fx-text-fill: #b91c1c;");
-            statusLabel.setText(exception.getMessage());
-
-            submitButton.setDisable(false);
-        }
+    private void loadAssets() {
+        if (busy) return;
+        busy = true; refresh.setDisable(true); submit.setDisable(true); assets.setDisable(true);
+        message("Loading reporting assets…", false);
+        FxTasks.run(service::getAllAssets, loaded -> {
+            assets.setItems(loaded.stream().filter(a -> a.getStatus() != AssetStatus.RETIRED).toList());
+            message(assets.isEmpty() ? "No reporting assets available. Ask an administrator to register an asset." : "Reporting assets updated.", false);
+            refresh.setText("Refresh assets");
+        }, error -> { message(error.getMessage() + " Retry to load assets.", true); refresh.setText("Retry assets"); },
+                () -> { busy = false; refresh.setDisable(false); assets.setDisable(false); submit.setDisable(assets.isEmpty()); });
     }
 
-    private int parseId(String value, String entityName) throws AceOsServiceException {
-        if (value == null || value.isBlank()) {
-            throw new AceOsServiceException(entityName + " ID is required");
-        }
-
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException exception) {
-            throw new AceOsServiceException(entityName + " ID must be a whole number", exception);
-        }
+    private void message(String text, boolean error) {
+        feedback.setText(text); feedback.getStyleClass().removeAll("error", "success");
+        feedback.getStyleClass().add(error ? "error" : "success");
     }
 }

@@ -634,6 +634,25 @@ public class AceOsService {
                 complaintRepository::findAll);
     }
 
+    public List<User> getActiveTechnicians() throws AceOsServiceException {
+        return execute(UserRole.ADMINISTRATOR, "getActiveTechnicians", "Technicians could not be loaded",
+                () -> new com.aceos.repository.RepairFlowRepository().activeTechnicians());
+    }
+
+    public com.aceos.model.RepairDetail getRepairDetail(int complaintId) throws AceOsServiceException {
+        requireId(complaintId, "Complaint");
+        return execute(null, "getRepairDetail", "Complaint progress could not be loaded",
+                () -> new com.aceos.repository.RepairFlowRepository().detail(requireComplaint(complaintId)));
+    }
+
+    public com.aceos.model.RepairDetail getWorkDetail(int workOrderId) throws AceOsServiceException {
+        requireId(workOrderId, "Work order");
+        return execute(null, "getWorkDetail", "Repair progress could not be loaded", () -> {
+            var work = requireWorkOrder(workOrderId);
+            return new com.aceos.repository.RepairFlowRepository().detail(work.getComplaint());
+        });
+    }
+
     public WorkOrder getWorkOrder(int workOrderId) throws AceOsServiceException {
         requireId(workOrderId, "Work order");
 
