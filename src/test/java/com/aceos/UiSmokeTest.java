@@ -102,60 +102,155 @@ class UiSmokeTest {
         verify.get(10, TimeUnit.SECONDS);
     }
 
-    @Test
-    void f2ControlsAndAssetStatusesAtSupportedSizes() throws Exception {
-        var example = new com.aceos.model.Asset(101, "AC-101", "Classroom AC", "HVAC", "Room 101",
-                com.aceos.model.AssetStatus.OUT_OF_SERVICE, com.aceos.model.ManualLifecycle.ACTIVE);
-        AceOsService preview = new AceOsService() {
-            @Override public com.aceos.model.Asset getAsset(int id) { return example; }
-            @Override public java.util.List<com.aceos.model.SafetyHold> getSafetyHolds(int id) {
-                return java.util.List.of(new com.aceos.model.SafetyHold(12, 101, 8,
-                        java.time.LocalDateTime.now(), null, null, null, null, null));
-            }
-            @Override public java.util.List<com.aceos.model.Asset> getAllAssets() {
-                return java.util.List.of(example,
-                        new com.aceos.model.Asset(102, "AC-102", "Lab AC", "HVAC", "Lab", com.aceos.model.AssetStatus.UNDER_MAINTENANCE),
-                        new com.aceos.model.Asset(103, "AC-103", "Office AC", "HVAC", "Office", com.aceos.model.AssetStatus.ACTIVE),
-                        new com.aceos.model.Asset(104, "AC-104", "Old AC", "HVAC", "Store", com.aceos.model.AssetStatus.RETIRED));
-            }
-            @Override public com.aceos.model.Asset changeAssetLifecycle(int id, com.aceos.model.ManualLifecycle expected,
-                    com.aceos.model.ManualLifecycle next, String reason) throws com.aceos.service.AceOsServiceException {
-                throw new com.aceos.service.AceOsServiceException("Example failure: refresh and retry");
-            }
-        };
-        for (int[] size : new int[][] {{800, 520}, {1280, 800}}) {
-            var controls = new java.util.concurrent.atomic.AtomicReference<AssetAvailabilityView>();
-            var directory = new java.util.concurrent.atomic.AtomicReference<AssetDirectoryView>();
-            FutureTask<Void> setup = new FutureTask<>(() -> {
-                controls.set(new AssetAvailabilityView(preview)); directory.set(new AssetDirectoryView(preview));
-                new Scene(controls.get(), size[0], size[1]); controls.get().applyCss(); controls.get().layout();
-                ((javafx.scene.control.TextField) controls.get().lookup("#availability-asset-id")).setText("101");
-                ((javafx.scene.control.Button) controls.get().lookup("#availability-load")).fire();
-                return null;
-            });
-            Platform.runLater(setup); setup.get(10, TimeUnit.SECONDS);
-            // Directory has no scene yet; wait directly on the backing table items.
-            awaitFx(() -> !controls.get().isDisabled()
-                    && ((javafx.scene.control.TableView<?>) directory.get().getChildren().get(3)).getItems().size() == 4, true);
-            FutureTask<Void> verify = new FutureTask<>(() -> {
-                assertTrue(((javafx.scene.control.Label) controls.get().lookup("#availability-summary")).getText().contains("OUT_OF_SERVICE"));
-                assertFalse(controls.get().lookup("#availability-clear").isDisabled());
-                snapshot(controls.get(), size, "f2-availability"); snapshot(directory.get(), size, "f2-asset-directory");
-                ((javafx.scene.control.TextField) controls.get().lookup("#availability-reason")).setText("Keep my reason on failure");
-                ((javafx.scene.control.Button) controls.get().lookup("#availability-change")).fire();
-                return null;
-            });
-            Platform.runLater(verify); verify.get(20, TimeUnit.SECONDS);
-            awaitFx(() -> !controls.get().isDisabled(), true);
-            FutureTask<Void> recovery = new FutureTask<>(() -> {
-                assertEquals("Keep my reason on failure", ((javafx.scene.control.TextField) controls.get().lookup("#availability-reason")).getText());
-                assertTrue(((javafx.scene.control.Label) controls.get().lookup("#availability-feedback")).getText().contains("Example failure"));
-                return null;
-            });
-            Platform.runLater(recovery); recovery.get(10, TimeUnit.SECONDS);
+    private static final class AssetPreview extends AceOsService {
+        final com.aceos.model.UserRole role;
+        final com.aceos.model.Asset asset = new com.aceos.model.Asset(101, "AC-101", "Classroom air conditioner", "Cooling", "Room 101", com.aceos.model.AssetStatus.OUT_OF_SERVICE, com.aceos.model.ManualLifecycle.ACTIVE);
+        volatile boolean failRead, failWrite, empty, cleared;
+        volatile CountDownLatch gate;
+        final java.util.concurrent.atomic.AtomicInteger reads = new java.util.concurrent.atomic.AtomicInteger(), writes = new java.util.concurrent.atomic.AtomicInteger();
+        AssetPreview(com.aceos.model.UserRole role) { this.role = role; }
+        @Override public com.aceos.model.User signedInUser() { return new com.aceos.model.User(1, "Example user", "example@aceos.local", role); }
+        @Override public com.aceos.model.DashboardSummary getDashboardSummary() {
+            background(); return new com.aceos.model.DashboardSummary(java.util.Map.of(), java.util.List.of());
+        }
+        void background() { assertFalse(Platform.isFxApplicationThread()); }
+        @Override public java.util.List<com.aceos.model.Asset> getAllAssets() throws com.aceos.service.AceOsServiceException {
+            background(); waitForGate(); if (failRead) throw new com.aceos.service.AceOsServiceException("Example read failure");
+            return empty ? java.util.List.of() : java.util.List.of(asset);
+        }
+        void waitForGate() { if (gate != null) try { gate.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { throw new RuntimeException(e); } }
+        @Override public com.aceos.model.AssetProfile getAssetProfile(int id) throws com.aceos.service.AceOsServiceException {
+            background(); assertEquals(101, id); reads.incrementAndGet(); waitForGate();
+            if (failRead) throw new com.aceos.service.AceOsServiceException("Example read failure");
+            var time = java.time.LocalDateTime.of(2026, 10, 12, 12, 0);
+            boolean admin = role == com.aceos.model.UserRole.ADMINISTRATOR;
+            return new com.aceos.model.AssetProfile(asset, role, java.util.List.of(new com.aceos.security.MaintenanceSummary(9, 51, "Cable replaced and cooling tested. Technical work remains visible without unrelated requester details.", time)),
+                admin ? java.util.List.of(new com.aceos.model.SafetyHold(12, 101, 8, time, cleared ? 1 : null, cleared ? "Verified correction" : null, null, cleared ? 51 : null, cleared ? time.plusHours(1) : null),
+                new com.aceos.model.SafetyHold(13, 101, 9, time.plusMinutes(20), null, null, null, null, null)) : java.util.List.of(),
+                admin ? java.util.List.of(new com.aceos.model.AssetProfile.LifecycleEvent(com.aceos.model.ManualLifecycle.OUT_OF_SERVICE, com.aceos.model.ManualLifecycle.ACTIVE, "Manual stop lifted; safety holds remain", 1, time)) : java.util.List.of(),
+                admin && !cleared ? java.util.List.of(new com.aceos.model.AssetProfile.ClearanceEvidence(12, 51, false, "Cable replaced", time.plusHours(1))) : java.util.List.of());
+        }
+        void write() throws com.aceos.service.AceOsServiceException {
+            background(); writes.incrementAndGet(); waitForGate(); if (failWrite) throw new com.aceos.service.AceOsServiceException("Example stale action");
+        }
+        @Override public com.aceos.model.Asset clearSafetyHold(int id, int h, String reason, Integer i, Integer w) throws com.aceos.service.AceOsServiceException {
+            assertEquals(101, id); assertEquals(12, h); assertNull(i); assertEquals(51, w); assertEquals("Verified correction", reason);
+            write(); cleared = true; return asset;
+        }
+        @Override public com.aceos.model.Asset changeAssetLifecycle(int id, com.aceos.model.ManualLifecycle expected, com.aceos.model.ManualLifecycle next, String reason) throws com.aceos.service.AceOsServiceException {
+            assertEquals(101, id); assertEquals(com.aceos.model.ManualLifecycle.ACTIVE, expected); assertEquals(com.aceos.model.ManualLifecycle.OUT_OF_SERVICE, next);
+            assertEquals("Keep my reason", reason); write(); return asset;
         }
     }
 
+    @Test
+    void assetProfilesAtSupportedSizesAndExactDirectoryNavigation() throws Exception {
+        for (var role : com.aceos.model.UserRole.values()) {
+            for (int[] size : new int[][] {{800, 520}, {1280, 800}}) {
+                var service = new AssetPreview(role);
+                var root = new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+                fx(() -> {
+                    root.set(new com.aceos.ui.WorkspaceView(service, () -> {}, () -> {}));
+                    new Scene(root.get(), size[0], size[1]); root.get().resize(size[0], size[1]);
+                    root.get().navigate("assets"); root.get().applyCss(); root.get().layout(); return null;
+                });
+                awaitControl(root.get(), "asset-refresh");
+                fx(() -> {
+                    var table = (javafx.scene.control.TableView<?>) root.get().lookup("#asset-table");
+                    assertEquals(1, table.getItems().size()); table.getSelectionModel().selectFirst();
+                    snapshot(root.get(), size, "asset-directory-" + role, true);
+                    table.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", javafx.scene.input.KeyCode.ENTER, false, false, false, false)); return null;
+                });
+                awaitControl(root.get(), "asset-profile-refresh");
+                fx(() -> {
+                    var profile = (AssetProfileView) ((AssetDirectoryView)root.get().getCenter()).getCenter();
+                    assertTrue(profile.lookupAll(".label").stream().anyMatch(n -> ((javafx.scene.control.Label)n).getText().contains("Effective availability: OUT_OF_SERVICE")));
+                    assertEquals(role == com.aceos.model.UserRole.ADMINISTRATOR, profile.lookup("#availability-actions") != null);
+                    snapshot(root.get(), size, "asset-profile-" + role, true);
+                    if (role == com.aceos.model.UserRole.ADMINISTRATOR) {
+                        profile.setVvalue(1); profile.layout();
+                        var bounds = profile.lookup("#availability-clear").localToScene(profile.lookup("#availability-clear").getBoundsInLocal());
+                        assertTrue(bounds.getMinY() >= 0 && bounds.getMaxY() <= size[1], "Hold action must be reachable by scrolling");
+                        snapshot(root.get(), size, "asset-controls", true);
+                    }
+                    fire(root.get(), "asset-profile-back"); return null;
+                });
+                awaitControl(root.get(), "asset-refresh");
+            }
+        }
+    }
+
+    @Test
+    void assetActionsRetainInputBlockStaleDuplicatesAndUseSelectedEvidence() throws Exception {
+        var service = new AssetPreview(com.aceos.model.UserRole.ADMINISTRATOR);
+        var root = new java.util.concurrent.atomic.AtomicReference<AssetProfileView>();
+        fx(() -> { root.set(new AssetProfileView(service, 101, () -> {})); new Scene(root.get(), 800, 520); return null; });
+        awaitControl(root.get(), "asset-profile-refresh");
+        service.failWrite = true; service.gate = new CountDownLatch(1);
+        fx(() -> {
+            ((javafx.scene.control.ComboBox<com.aceos.model.ManualLifecycle>) root.get().lookup("#availability-lifecycle")).setValue(com.aceos.model.ManualLifecycle.OUT_OF_SERVICE);
+            ((javafx.scene.control.TextArea) root.get().lookup("#availability-reason")).setText("Keep my reason");
+            fire(root.get(), "availability-change"); fire(root.get(), "availability-change"); fire(root.get(), "asset-profile-refresh"); return null;
+        });
+        service.gate.countDown(); awaitControl(root.get(), "asset-profile-refresh");
+        fx(() -> {
+            assertEquals(1, service.writes.get()); assertEquals("Keep my reason", ((javafx.scene.control.TextArea) root.get().lookup("#availability-reason")).getText());
+            assertTrue(root.get().lookup("#availability-change").isDisabled()); assertTrue(root.get().lookup("#availability-actions").isDisabled());
+            assertTrue(((javafx.scene.control.Label)root.get().lookup("#asset-profile-feedback")).getText().contains("Refresh before"));
+            service.failWrite = false; service.gate = null; fire(root.get(), "asset-profile-refresh"); return null;
+        });
+        awaitControl(root.get(), "asset-profile-refresh");
+        fx(() -> {
+            var holds = (javafx.scene.control.ComboBox<?>)root.get().lookup("#availability-hold");
+            holds.getSelectionModel().selectLast();
+            assertTrue(((javafx.scene.control.ComboBox<?>)root.get().lookup("#availability-evidence")).getItems().isEmpty());
+            assertTrue(root.get().lookup("#availability-clear").isDisabled());
+            holds.getSelectionModel().selectFirst();
+            ((javafx.scene.control.ComboBox<?>)root.get().lookup("#availability-evidence")).getSelectionModel().selectFirst();
+            ((javafx.scene.control.TextArea)root.get().lookup("#availability-reason")).setText("Verified correction");
+            fire(root.get(), "availability-clear"); fire(root.get(), "availability-clear"); return null;
+        });
+        awaitControl(root.get(), "asset-profile-refresh");
+        fx(() -> {
+            assertEquals(2, service.writes.get()); assertTrue(service.cleared);
+            assertEquals("", ((javafx.scene.control.TextArea)root.get().lookup("#availability-reason")).getText());
+            assertEquals(1, ((javafx.scene.control.ComboBox<?>)root.get().lookup("#availability-hold")).getItems().size());
+            assertTrue(root.get().lookup("#availability-clear").isDisabled()); return null;
+        });
+    }
+
+    @Test
+    void assetDirectoryAndProfileFailureRetryEmptyAndSearchRecovery() throws Exception {
+        var service = new AssetPreview(com.aceos.model.UserRole.REQUESTER); service.failRead = true;
+        var root = new java.util.concurrent.atomic.AtomicReference<AssetDirectoryView>();
+        fx(() -> { root.set(new AssetDirectoryView(service)); new Scene(root.get(), 800, 520); return null; });
+        awaitControl(root.get(), "asset-refresh");
+        fx(() -> {
+            assertTrue(((javafx.scene.control.TableView<?>)root.get().lookup("#asset-table")).getItems().isEmpty());
+            assertEquals("Retry", ((javafx.scene.control.Button)root.get().lookup("#asset-refresh")).getText());
+            service.failRead = false; service.empty = true; fire(root.get(), "asset-refresh"); return null;
+        });
+        awaitControl(root.get(), "asset-refresh");
+        fx(() -> {
+            assertTrue(((javafx.scene.control.Label)root.get().lookup("#asset-feedback")).getText().contains("No assets"));
+            service.empty = false; fire(root.get(), "asset-refresh"); return null;
+        });
+        awaitControl(root.get(), "asset-refresh");
+        fx(() -> {
+            var search = (javafx.scene.control.TextField)root.get().lookup("#asset-search"); search.setText("missing");
+            var table = (javafx.scene.control.TableView<?>)root.get().lookup("#asset-table"); assertTrue(table.getItems().isEmpty());
+            search.setText("room 101"); assertEquals(1, table.getItems().size());
+            table.getSelectionModel().selectFirst(); service.failRead = true; fire(root.get(), "asset-open"); return null;
+        });
+        awaitControl(root.get(), "asset-profile-refresh");
+        fx(() -> {
+            assertTrue(((javafx.scene.layout.VBox)root.get().lookup("#asset-profile-details")).getChildren().isEmpty());
+            assertNull(root.get().lookup("#availability-actions"));
+            service.failRead = false; fire(root.get(), "asset-profile-refresh"); return null;
+        });
+        awaitControl(root.get(), "asset-profile-refresh");
+        assertEquals(2, service.reads.get());
+    }
     private void awaitFx(java.util.function.BooleanSupplier condition, boolean required) throws Exception {
         for (int i = 0; i < 100; i++) {
             FutureTask<Boolean> check = new FutureTask<>(condition::getAsBoolean);

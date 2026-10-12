@@ -577,6 +577,19 @@ public class AceOsService {
                 null, "getAsset", "The asset could not be loaded", () -> requireAsset(assetId));
     }
 
+    public com.aceos.model.AssetProfile getAssetProfile(int assetId) throws AceOsServiceException {
+        requireId(assetId, "Asset");
+        return execute(null, "getAssetProfile", "Asset profile could not be loaded", () -> {
+            Asset asset = requireAsset(assetId);
+            boolean admin = Scope.user().getRole() == UserRole.ADMINISTRATOR;
+            return new com.aceos.model.AssetProfile(asset, Scope.user().getRole(),
+                    new com.aceos.repository.FoundationRepository().history(assetId),
+                    admin ? AvailabilityRepository.holds(assetId) : List.of(),
+                    admin ? AvailabilityRepository.lifecycleHistory(assetId) : List.of(),
+                    admin ? AvailabilityRepository.clearanceEvidence(assetId) : List.of());
+        });
+    }
+
     public List<Asset> getAllAssets() throws AceOsServiceException {
         return execute(
                 null, "getAllAssets", "The assets could not be loaded", assetRepository::findAll);

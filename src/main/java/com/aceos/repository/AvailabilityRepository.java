@@ -103,4 +103,49 @@ public final class AvailabilityRepository {
         SecurityRepository.audit(Scope.user().getUserId(), "SAFETY_HOLD_CLEARED", holdId);
         recalculate(assetId);
     }
+
+    public static List<AssetProfile.LifecycleEvent> lifecycleHistory(int assetId) throws SQLException {
+        SecurityRepository.requireRole(Scope.user(), UserRole.ADMINISTRATOR);
+        var rows = new ArrayList<AssetProfile.LifecycleEvent>();
+        try (var p = SecurityRepository.connection().prepareStatement(
+                "SELECT * FROM asset_lifecycle_history WHERE asset_id=? ORDER BY changed_at DESC,history_id DESC")) {
+            p.setInt(1, assetId);
+            try (var r = p.executeQuery()) {
+                while (r.next()) rows.add(new AssetProfile.LifecycleEvent(
+                        ManualLifecycle.valueOf(r.getString("previous_lifecycle")),
+                        ManualLifecycle.valueOf(r.getString("next_lifecycle")), r.getString("reason"),
+                        r.getInt("actor_user_id"), r.getTimestamp("changed_at").toLocalDateTime()));
+            }
+        }
+        return rows;
+    }
+
+    /** Mirrors clearance eligibility; writes still revalidate evidence and the active hold. */
+    public static List<AssetProfile.ClearanceEvidence> clearanceEvidence(int assetId) throws SQLException {
+        SecurityRepository.requireRole(Scope.user(), UserRole.ADMINISTRATOR);
+        var rows = new ArrayList<AssetProfile.ClearanceEvidence>();
+        String sql = """
+                SELECT h.hold_id,i.inspection_id AS id,1 AS inspection,i.inspection_type AS description,i.completed_at AS at
+                FROM asset_safety_holds h JOIN asset_inspections f ON f.inspection_id=h.failed_inspection_id
+                JOIN asset_inspections i ON i.asset_id=h.asset_id
+                WHERE h.asset_id=? AND h.cleared_at IS NULL AND i.status='PASSED'
+                AND i.completed_at>h.created_at AND i.completed_date>=f.completed_date
+                UNION ALL
+                SELECT h.hold_id,w.work_order_id,0,m.action_taken,w.verified_at
+                FROM asset_safety_holds h JOIN complaints c ON c.asset_id=h.asset_id
+                JOIN work_orders w ON w.complaint_id=c.complaint_id
+                JOIN maintenance_records m ON m.work_order_id=w.work_order_id
+                WHERE h.asset_id=? AND h.cleared_at IS NULL AND w.status='VERIFIED' AND w.verified_at>h.created_at
+                ORDER BY hold_id,at DESC,id DESC
+                """;
+        try (var p = SecurityRepository.connection().prepareStatement(sql)) {
+            p.setInt(1, assetId); p.setInt(2, assetId);
+            try (var r = p.executeQuery()) {
+                while (r.next()) rows.add(new AssetProfile.ClearanceEvidence(r.getInt("hold_id"),
+                        r.getInt("id"), r.getBoolean("inspection"), r.getString("description"),
+                        r.getTimestamp("at").toLocalDateTime()));
+            }
+        }
+        return rows;
+    }
 }

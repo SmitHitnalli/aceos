@@ -124,6 +124,66 @@ class FoundationTest {
     }
 
     @Test
+    void assetProfilesPreserveHistoryOwnershipAndRetiredLookupRules() throws Exception {
+        Asset a = asset("PROFILE"); var mine = assigned(a);
+        technician.startWorkOrder(mine.getWorkOrderId()); technician.completeWorkOrder(mine.getWorkOrderId(), "Own completion");
+        admin.verifyWorkOrder(mine.getWorkOrderId());
+        var c = complaint(otherRequester, a); admin.acceptComplaint(c.getComplaintId());
+        var other = admin.assignWorkOrder(c.getComplaintId(), 6);
+        otherTechnician.startWorkOrder(other.getWorkOrderId()); otherTechnician.completeWorkOrder(other.getWorkOrderId(), "Other technical completion");
+        admin.verifyWorkOrder(other.getWorkOrderId());
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.OUT_OF_SERVICE, "Manual stop");
+        inspection(a, InspectionStatus.FAILED);
+        var ownProfile = requester.getAssetProfile(a.getAssetId());
+        assertEquals(UserRole.REQUESTER, ownProfile.role()); assertEquals(1, ownProfile.maintenance().size());
+        assertEquals(mine.getWorkOrderId(), ownProfile.maintenance().getFirst().workOrderId());
+        assertTrue(ownProfile.holds().isEmpty()); assertTrue(ownProfile.lifecycle().isEmpty()); assertTrue(ownProfile.evidence().isEmpty());
+        assertEquals(2, technician.getAssetProfile(a.getAssetId()).maintenance().size());
+        assertTrue(technician.getAssetProfile(a.getAssetId()).holds().isEmpty());
+        denied(() -> technician.getAssetProfile(asset("UNASSIGNED-PROFILE").getAssetId()));
+        var all = admin.getAssetProfile(a.getAssetId()); assertEquals(2, all.maintenance().size());
+        assertEquals(1, all.holds().size()); assertEquals("Manual stop", all.lifecycle().getFirst().reason());
+        assertEquals(1, all.lifecycle().getFirst().actorId());
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.OUT_OF_SERVICE, ManualLifecycle.RETIRED, "Retire finished asset");
+        denied(() -> requester.getAssetProfile(a.getAssetId()));
+        assertEquals(AssetStatus.RETIRED, technician.getAssetProfile(a.getAssetId()).asset().getStatus());
+        // Own historical progress keeps its existing linked lookup; reporting profiles do not broaden it.
+        assertEquals(mine.getWorkOrderId(), requester.getWorkDetail(mine.getWorkOrderId()).work().getWorkOrderId());
+        denied(() -> new AceOsService().getAssetProfile(a.getAssetId()));
+        technician.signOut(); denied(() -> technician.getAssetProfile(a.getAssetId()));
+    }
+
+    @Test
+    void assetProfileEvidenceExcludesOldForeignBackdatedAndStaleRecords() throws Exception {
+        Asset a = asset("PROFILE-EVIDENCE"); inspection(a, InspectionStatus.PASSED);
+        var old = assigned(a); technician.startWorkOrder(old.getWorkOrderId());
+        technician.completeWorkOrder(old.getWorkOrderId(), "Old correction"); admin.verifyWorkOrder(old.getWorkOrderId());
+        inspection(a, InspectionStatus.FAILED); inspection(a, InspectionStatus.FAILED);
+        inspection(asset("OTHER-PROFILE-EVIDENCE"), InspectionStatus.PASSED);
+        var backdated = admin.scheduleAssetInspection(a.getAssetId(), "Backdated", LocalDate.now());
+        admin.assignInspection(backdated.getInspectionId(), 5);
+        technician.completeAssetInspection(backdated.getInspectionId(), InspectionStatus.PASSED, "Earlier date", LocalDate.now().minusDays(1));
+        var current = assigned(a); technician.startWorkOrder(current.getWorkOrderId());
+        technician.completeWorkOrder(current.getWorkOrderId(), "Later correction");
+        assertTrue(admin.getAssetProfile(a.getAssetId()).evidence().isEmpty());
+        var pass = inspection(a, InspectionStatus.PASSED); admin.verifyWorkOrder(current.getWorkOrderId());
+        var profile = admin.getAssetProfile(a.getAssetId()); assertEquals(4, profile.evidence().size());
+        assertTrue(profile.evidence().stream().allMatch(e -> e.inspection() ? e.id() == pass.getInspectionId() : e.id() == current.getWorkOrderId()));
+        var first = profile.holds().getFirst(); var second = profile.holds().getLast();
+        denied(() -> requester.clearSafetyHold(a.getAssetId(), first.holdId(), "Forbidden", pass.getInspectionId(), null));
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), first.holdId(), "", pass.getInspectionId(), null));
+        admin.clearSafetyHold(a.getAssetId(), first.holdId(), "Later passing inspection", pass.getInspectionId(), null);
+        denied(() -> admin.clearSafetyHold(a.getAssetId(), first.holdId(), "Stale hold", pass.getInspectionId(), null));
+        var remaining = admin.getAssetProfile(a.getAssetId()); assertEquals(AssetStatus.OUT_OF_SERVICE, remaining.asset().getStatus());
+        assertTrue(remaining.evidence().stream().allMatch(e -> e.holdId() == second.holdId()));
+        admin.clearSafetyHold(a.getAssetId(), second.holdId(), "Verified later repair", null, current.getWorkOrderId());
+        assertTrue(admin.getAssetProfile(a.getAssetId()).evidence().isEmpty());
+        assertEquals(AssetStatus.ACTIVE, admin.getAssetProfile(a.getAssetId()).asset().getStatus());
+        admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.OUT_OF_SERVICE, "Stop");
+        denied(() -> admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.RETIRED, "Stale lifecycle"));
+    }
+
+    @Test
     void roleDashboardScopesQueuesProgressAndSession() throws Exception {
         var a = asset("DASHBOARD");
         var own = complaint(requester, a);
