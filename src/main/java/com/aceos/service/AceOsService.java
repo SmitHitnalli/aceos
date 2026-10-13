@@ -553,10 +553,11 @@ public class AceOsService {
                     WorkOrder workOrder = requireWorkOrder(workOrderId);
                     AvailabilityRepository.requireOperational(workOrder.getComplaint().getAsset().getAssetId());
                     requireActor(administratorId);
-                    User administrator = Scope.user();
-
-                    workOrder.verify(administrator);
-                    workOrderRepository.updateLifecycle(workOrder);
+                    var reviews = new com.aceos.repository.RepairReviewRepository();
+                    var records = reviews.submissions(workOrder);
+                    if(records.size()!=1 || records.getFirst().number()!=1 || records.getFirst().reviewId()!=0)
+                        throw new IllegalStateException("Corrected repairs require review of the exact current submission; open repair details");
+                    reviews.verify(workOrder,workOrder.getCurrentSubmissionId());
 
                     return requireWorkOrder(workOrderId);
                 });
@@ -568,6 +569,39 @@ public class AceOsService {
                 "getDashboardStatistics",
                 "The dashboard statistics could not be loaded",
                 this::scopedStatistics);
+    }
+
+    public WorkOrder returnRepair(int workOrderId,int submissionId,String reason) throws AceOsServiceException {
+        requireId(workOrderId,"Work order"); requireId(submissionId,"Submission");
+        String text=requireNote(reason,"Return reason");
+        return execute(UserRole.ADMINISTRATOR,"REPAIR_RETURNED","The repair could not be returned",() -> {
+            WorkOrder w=requireWorkOrder(workOrderId);
+            AvailabilityRepository.requireOperational(w.getComplaint().getAsset().getAssetId());
+            new com.aceos.repository.RepairReviewRepository().returnForCorrection(w,submissionId,text);
+            return requireWorkOrder(workOrderId);
+        });
+    }
+
+    public MaintenanceRecord resubmitRepair(int workOrderId,int submissionId,int returnId,String action)
+            throws AceOsServiceException {
+        requireId(workOrderId,"Work order");requireId(submissionId,"Submission");requireId(returnId,"Return review");
+        String text=requireText(action,"Correction performed",5000);
+        return execute(UserRole.TECHNICIAN,"REPAIR_RESUBMITTED","The correction could not be submitted",() -> {
+            requireAssignedWork(workOrderId); WorkOrder w=requireWorkOrder(workOrderId);
+            AvailabilityRepository.requireOperational(w.getComplaint().getAsset().getAssetId());
+            int id=new com.aceos.repository.RepairReviewRepository().resubmit(w,submissionId,returnId,text);
+            return maintenanceRecordRepository.findById(id).orElseThrow(() -> new SQLException("Submission could not be retrieved"));
+        });
+    }
+
+    public WorkOrder verifyRepairSubmission(int workOrderId,int submissionId) throws AceOsServiceException {
+        requireId(workOrderId,"Work order");requireId(submissionId,"Submission");
+        return execute(UserRole.ADMINISTRATOR,"verifyWorkOrder","The repair could not be verified",() -> {
+            WorkOrder w=requireWorkOrder(workOrderId);
+            AvailabilityRepository.requireOperational(w.getComplaint().getAsset().getAssetId());
+            new com.aceos.repository.RepairReviewRepository().verify(w,submissionId);
+            return requireWorkOrder(workOrderId);
+        });
     }
 
     public com.aceos.model.DashboardSummary getDashboardSummary() throws AceOsServiceException {

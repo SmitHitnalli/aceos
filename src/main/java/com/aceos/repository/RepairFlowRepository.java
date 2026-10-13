@@ -51,6 +51,7 @@ public final class RepairFlowRepository {
             }
         }
         String action = null;
+        List<RepairSubmission> submissions=List.of();
         if (work != null) {
             events.add(new RepairDetail.Event("Repair assigned", work.getAssignedAt()));
             try (var p = SecurityRepository.connection().prepareStatement("""
@@ -65,13 +66,15 @@ public final class RepairFlowRepository {
             if (work.getStartedAt() != null) events.add(new RepairDetail.Event("Repair started", work.getStartedAt()));
             if (work.getCompletedAt() != null) events.add(new RepairDetail.Event("Repair completed · awaiting verification", work.getCompletedAt()));
             if (work.getVerifiedAt() != null) events.add(new RepairDetail.Event("Repair verified · complaint resolved", work.getVerifiedAt()));
-            try (var p = SecurityRepository.connection().prepareStatement(
-                    "SELECT action_taken FROM maintenance_records WHERE work_order_id=?")) {
-                p.setInt(1, work.getWorkOrderId());
-                try (var r = p.executeQuery()) { if (r.next()) action = r.getString(1); }
+            submissions=new RepairReviewRepository().submissions(work);
+            for(var submission:submissions) {
+                if(submission.recordId()==work.getCurrentSubmissionId())action=submission.actionTaken();
+                if(submission.number()>1)events.add(new RepairDetail.Event("Correction submitted · submission "+submission.number(),submission.at()));
+                if("RETURN".equals(submission.reviewKind()))events.add(new RepairDetail.Event(
+                        "Repair returned for correction · submission "+submission.number(),submission.reviewedAt()));
             }
         }
         events.sort(java.util.Comparator.comparing(RepairDetail.Event::at));
-        return new RepairDetail(complaint, work, action, events, new ComplaintNoteRepository().list(complaint.getComplaintId()));
+        return new RepairDetail(complaint, work, action, events, new ComplaintNoteRepository().list(complaint.getComplaintId()),submissions);
     }
 }

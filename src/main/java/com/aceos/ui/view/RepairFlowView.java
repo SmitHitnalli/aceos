@@ -38,6 +38,7 @@ public final class RepairFlowView extends ScrollPane {
     private final TextField search = new TextField();
     private final ComboBox<String> status = new ComboBox<>();
     private final TextArea completion = new TextArea(), reviewReason = new TextArea(), comment = new TextArea(), lifecycleReason = new TextArea();
+    private final TextArea returnReason = new TextArea(), correction = new TextArea();
     private final TechnicianSelector technicians = new TechnicianSelector("repair-technician");
     private Integer selectedId;
     private boolean busy, saving;
@@ -49,7 +50,7 @@ public final class RepairFlowView extends ScrollPane {
 
     public RepairFlowView(AceOsService service, boolean jobs, String filter, Integer recordId) {
         this.service = service; this.jobs = jobs;
-        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !completion.getText().isEmpty() || !reviewReason.getText().isEmpty() || !comment.getText().isEmpty() || !lifecycleReason.getText().isEmpty() || technicians.selected() != null);
+        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !completion.getText().isEmpty() || !reviewReason.getText().isEmpty() || !comment.getText().isEmpty() || !lifecycleReason.getText().isEmpty() || !returnReason.getText().isEmpty() || !correction.getText().isEmpty() || technicians.selected() != null);
         UserRole current;
         int currentId=0;
         try { var actor=service.signedInUser();current=actor.getRole();currentId=actor.getUserId(); }
@@ -62,7 +63,7 @@ public final class RepairFlowView extends ScrollPane {
         refresh.setId("repair-refresh"); refresh.setOnAction(e -> { if (selectedId == null) loadList(); else loadDetail(); });
         back.setId("repair-back"); back.setOnAction(e -> {
             if (!com.aceos.ui.NavigationGuard.allowLeave(this)) return;
-            savedFeedback = null; selectedId = null; completion.clear(); reviewReason.clear(); comment.clear(); lifecycleReason.clear(); technicians.clear(); showList(); loadList();
+            savedFeedback = null; selectedId = null; completion.clear(); reviewReason.clear(); comment.clear(); lifecycleReason.clear(); returnReason.clear(); correction.clear(); technicians.clear(); showList(); loadList();
         });
         feedback.setId("repair-feedback"); feedback.setWrapText(true);
         var header = new FlowPane(12, 8, heading, refresh, back);
@@ -106,6 +107,10 @@ public final class RepairFlowView extends ScrollPane {
         for (var field : new TextArea[]{reviewReason,comment,lifecycleReason}) { field.setWrapText(true); field.setPrefRowCount(3); field.setPromptText("Up to 2000 characters; visible to authorized complaint participants"); }
         reviewReason.setId("repair-review-reason"); comment.setId("repair-comment");
         lifecycleReason.setId("repair-lifecycle-reason");
+        returnReason.setId("repair-return-reason");returnReason.setWrapText(true);returnReason.setPrefRowCount(3);
+        returnReason.setPromptText("Required reason, up to 2000 characters; visible to authorized complaint participants");
+        correction.setId("repair-correction");correction.setWrapText(true);correction.setPrefRowCount(3);
+        correction.setPromptText("Describe the correction performed, up to 5000 characters");
         detail.setId("repair-detail"); detail.getStyleClass().add("dashboard-card");
         setContent(content);
         if (recordId == null) { showList(); loadList(); }
@@ -136,7 +141,7 @@ public final class RepairFlowView extends ScrollPane {
     private void openSelected() {
         if (busy || table.getSelectionModel().getSelectedItem() == null) return;
         selectedId = table.getSelectionModel().getSelectedItem().id();
-        completion.clear(); reviewReason.clear(); comment.clear(); lifecycleReason.clear(); technicians.clear(); showDetail(); loadDetail();
+        completion.clear(); reviewReason.clear(); comment.clear(); lifecycleReason.clear(); returnReason.clear(); correction.clear(); technicians.clear(); showDetail(); loadDetail();
     }
 
     private void loadList() {
@@ -183,7 +188,23 @@ public final class RepairFlowView extends ScrollPane {
         if (role == UserRole.ADMINISTRATOR || role == UserRole.TECHNICIAN)
             detail.getChildren().add(text("Reported by " + c.getReportedBy().getName(), "muted"));
         if (w != null) detail.getChildren().add(text("Assigned technician: " + w.getTechnician().getName(), "muted"));
-        if (data.actionTaken() != null) detail.getChildren().addAll(text("Work performed", "section-title"), text(data.actionTaken(), ""));
+        if (data.actionTaken() != null) detail.getChildren().addAll(text("Latest work submitted", "section-title"), text(data.actionTaken(), ""));
+        if(w!=null && w.getCompletedAt()!=null)detail.getChildren().add(text("First completed: "+formatTime(w.getCompletedAt()),"muted"));
+        if(!data.submissions().isEmpty()) {
+            detail.getChildren().add(text("Latest submitted: "+formatTime(data.submissions().getLast().at()),"muted"));
+            detail.getChildren().add(text("Submission and review history","section-title"));
+            for(var s:data.submissions()) {
+                String author=s.authorId()==null?"Historical submitter details were not recorded"
+                        : s.authorName()+" · #"+s.authorId()+" · "+s.authorRole();
+                detail.getChildren().addAll(text("Submission "+s.number()+" · Record #"+s.recordId()+" · "+s.disposition()+" · "+formatTime(s.at()),"muted"),
+                        text(author,"muted"),text(s.actionTaken(),""));
+                if(s.reviewId()!=0) {
+                    detail.getChildren().add(text(("RETURN".equals(s.reviewKind())?"Returned for correction":"Verified")
+                            +" · "+s.reviewerName()+" · #"+s.reviewerId()+" · "+s.reviewerRole()+" · "+formatTime(s.reviewedAt()),"muted"));
+                    if(s.reason()!=null)detail.getChildren().add(text(s.reason(),""));
+                } else if(s.disposition().equals("Verified"))detail.getChildren().add(text("Historical verification; review details were not recorded.","muted"));
+            }
+        }
         reviewReason.setEditable(c.getStatus()==ComplaintStatus.SUBMITTED);
         if (role==UserRole.ADMINISTRATOR && c.getStatus()!=ComplaintStatus.SUBMITTED && !reviewReason.getText().isEmpty()) {
             Label retained = new Label("Retained review draft (already reviewed; copy before leaving)"); retained.setLabelFor(reviewReason);
@@ -220,12 +241,48 @@ public final class RepairFlowView extends ScrollPane {
             complete.setOnAction(e -> {
                 String input = completion.getText();
                 if (input.isBlank()) { message("Describe the work performed before completing the repair.", true); return; }
-                mutate(() -> service.completeWorkOrder(w.getWorkOrderId(), input));
+                mutate(() -> service.completeWorkOrder(w.getWorkOrderId(), input),completion::clear,"Repair completion submitted; awaiting verification.");
             });
             actions.getChildren().addAll(label, completion, complete);
         }
-        if (role == UserRole.ADMINISTRATOR && w != null && w.getStatus() == WorkOrderStatus.COMPLETED)
-            actions.getChildren().add(action("Verify completed repair", "repair-verify", () -> service.verifyWorkOrder(w.getWorkOrderId())));
+        boolean canReturn=role==UserRole.ADMINISTRATOR && w!=null && w.getStatus()==WorkOrderStatus.COMPLETED;
+        returnReason.setEditable(canReturn);
+        if(canReturn || !returnReason.getText().isEmpty()) {
+            Label label=new Label(canReturn?"Return reason (required)":"Retained return-reason draft (copy before leaving)");label.setLabelFor(returnReason);
+            actions.getChildren().addAll(label,returnReason);
+            if(canReturn) {
+                Button change=new Button("Return for correction");change.setId("repair-return");change.getStyleClass().add("primary");
+                change.setOnAction(e -> {
+                    String input=returnReason.getText();if(!validNote(input,"Return reason"))return;
+                    mutate(() -> service.returnRepair(w.getWorkOrderId(),w.getCurrentSubmissionId(),input),returnReason::clear,"Repair returned for correction; reason saved.");
+                });
+                Button verify=new Button("Verify completed repair");verify.setId("repair-verify");verify.getStyleClass().add("primary");
+                verify.setOnAction(e -> mutate(() -> service.verifyRepairSubmission(w.getWorkOrderId(),w.getCurrentSubmissionId()),
+                        () -> {},"Repair verified; complaint resolved."));
+                actions.getChildren().add(new FlowPane(8,8,change,verify));
+            }
+        }
+        boolean canCorrect=role==UserRole.TECHNICIAN && w!=null && w.getStatus()==WorkOrderStatus.RETURNED;
+        correction.setEditable(canCorrect);
+        if(canCorrect || !correction.getText().isEmpty()) {
+            Label label=new Label(canCorrect?"Correction performed (required)":"Retained correction draft (copy before leaving)");label.setLabelFor(correction);
+            actions.getChildren().addAll(label,correction);
+            if(canCorrect) {
+                var latest=data.submissions().isEmpty()?null:data.submissions().getLast();
+                Button resubmit=new Button("Resubmit corrected repair");resubmit.setId("repair-resubmit");resubmit.getStyleClass().add("primary");
+                resubmit.setDisable(latest==null || latest.reviewId()==0 || !"RETURN".equals(latest.reviewKind()));
+                resubmit.setOnAction(e -> {
+                    String input=correction.getText();if(input.isBlank()){message("Describe the correction performed.",true);return;}
+                    mutate(() -> service.resubmitRepair(w.getWorkOrderId(),w.getCurrentSubmissionId(),latest.reviewId(),input),
+                            correction::clear,"Correction submitted; awaiting administrator verification.");
+                });
+                actions.getChildren().addAll(text("The same technician remains assigned. Earlier work and reasons are preserved.","muted"),resubmit);
+            }
+        }
+        if(role==UserRole.TECHNICIAN && (w==null || w.getStatus()!=WorkOrderStatus.IN_PROGRESS) && !completion.getText().isEmpty()) {
+            Label retained=new Label("Retained completion draft (copy before leaving)");retained.setLabelFor(completion);completion.setEditable(false);
+            actions.getChildren().addAll(retained,completion);
+        } else completion.setEditable(true);
         boolean owner=role==UserRole.REQUESTER && actorId==c.getReportedBy().getUserId();
         boolean withdraw=owner && c.getStatus()==ComplaintStatus.SUBMITTED && w==null;
         boolean reopen=w==null && c.getAsset().getManualLifecycle()!=ManualLifecycle.RETIRED
@@ -273,6 +330,7 @@ public final class RepairFlowView extends ScrollPane {
                 event.at().format(DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss")) + " · " + event.description(), "muted"));
         if (c.getStatus() == ComplaintStatus.ACCEPTED && w == null) detail.getChildren().add(text("Awaiting technician assignment.", "muted"));
         if (w != null && w.getStatus() == WorkOrderStatus.COMPLETED) detail.getChildren().add(text("Completion is awaiting administrator verification.", "muted"));
+        if(w!=null && w.getStatus()==WorkOrderStatus.RETURNED)detail.getChildren().add(text("Returned for correction. The complaint remains open and availability restrictions stay in force.","muted"));
     }
 
     private boolean validNote(String input, String field) {
@@ -330,12 +388,16 @@ public final class RepairFlowView extends ScrollPane {
         Label label = new Label(value); label.setWrapText(true); label.setMinWidth(0);
         if (!style.isEmpty()) label.getStyleClass().add(style); return label;
     }
+    private static String formatTime(java.time.LocalDateTime at) {
+        return at.format(DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss"));
+    }
     private static String readable(String status) {
         return switch (status) {
             case "SUBMITTED" -> "Awaiting review";
             case "ACCEPTED" -> "Accepted · awaiting assignment";
             case "WORK_ORDER_CREATED" -> "Repair assigned";
             case "COMPLETED" -> "Completed · awaiting verification";
+            case "RETURNED" -> "Returned for correction";
             case "RESOLVED" -> "Resolved · repair verified";
             case "WITHDRAWN" -> "Withdrawn · history preserved";
             default -> status.replace('_', ' ').toLowerCase(Locale.ROOT);

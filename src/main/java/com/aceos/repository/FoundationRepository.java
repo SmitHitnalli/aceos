@@ -104,9 +104,9 @@ public final class FoundationRepository {
         var rows = new java.util.ArrayList<MaintenanceSummary>();
         boolean requester = Scope.user().getRole() == UserRole.REQUESTER;
         String sql =
-                "SELECT m.* FROM maintenance_records m JOIN work_orders w ON"
+                "SELECT m.*,CASE WHEN r.kind='RETURN' THEN 'Returned' WHEN w.verified_submission_id=m.maintenance_record_id THEN 'Verified' WHEN w.current_submission_id=m.maintenance_record_id THEN 'Awaiting review' ELSE 'Superseded' END disposition FROM maintenance_records m JOIN work_orders w ON"
                         + " w.work_order_id=m.work_order_id JOIN complaints c ON"
-                        + " c.complaint_id=w.complaint_id WHERE c.asset_id=?"
+                        + " c.complaint_id=w.complaint_id LEFT JOIN repair_reviews r ON r.maintenance_record_id=m.maintenance_record_id WHERE c.asset_id=?"
                         + (requester ? " AND c.reported_by_user_id=?" : "")
                         + " ORDER BY m.recorded_at DESC,m.maintenance_record_id DESC";
         try (var p = SecurityRepository.connection().prepareStatement(sql)) {
@@ -119,7 +119,7 @@ public final class FoundationRepository {
                                     r.getInt("maintenance_record_id"),
                                     r.getInt("work_order_id"),
                                     r.getString("action_taken"),
-                                    r.getTimestamp("recorded_at").toLocalDateTime()));
+                                    r.getTimestamp("recorded_at").toLocalDateTime(),r.getInt("submission_number"),r.getString("disposition")));
             }
         }
         return rows;

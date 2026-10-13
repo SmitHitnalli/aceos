@@ -73,6 +73,7 @@ public class DashboardView extends ScrollPane {
                         card("assigned", "Ready to start", "Open maintenance", "maintenance"),
                         card("started", "Repairs in progress", "Record completion", "maintenance"),
                         card("completed", "Awaiting verification", "View jobs", "jobs"),
+                        card("corrections", "Returned for correction", "Correct repairs", "corrections"),
                         card("inspections", "Scheduled inspections", "Complete inspection", "complete-inspection"),
                         card("overdueInspections", "Overdue inspections", "View inspections", "inspections"));
                 content.getChildren().addAll(header, description, action("Assigned asset schedules", "schedule-directory", false));
@@ -193,6 +194,7 @@ public class DashboardView extends ScrollPane {
             case "REJECTED" -> "Complaint rejected";
             case "WITHDRAWN" -> "Complaint withdrawn · history preserved";
             case "COMPLETED" -> "Repair completed · awaiting administrator verification";
+            case "RETURNED" -> "Returned for correction · open the administrator reason";
             default -> status.replace('_', ' ').toLowerCase();
         };
     }

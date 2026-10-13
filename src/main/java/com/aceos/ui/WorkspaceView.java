@@ -88,6 +88,7 @@ public final class WorkspaceView extends BorderPane {
         } else if (role == UserRole.TECHNICIAN) {
             add("maintenance", "My maintenance", () -> new RepairFlowView(service, true, null));
             add("jobs", "Assigned jobs", () -> new RepairFlowView(service, true, null));
+            shortcut("corrections", "jobs", "Returned repairs", () -> new RepairFlowView(service, true, "RETURNED"));
             add("complete-inspection", "Complete inspection", () -> new AssetInspectionManagementView(service));
             add("inspections", "Assigned inspections", () -> new AssetInspectionDirectoryView(service));
             add("complaints", "Linked complaints", () -> new RepairFlowView(service, false, null));

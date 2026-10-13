@@ -48,10 +48,10 @@ public class MaintenanceRecord {
         );
 
         if (workOrder.getStatus() != WorkOrderStatus.COMPLETED
+                && workOrder.getStatus() != WorkOrderStatus.RETURNED
                 && workOrder.getStatus() != WorkOrderStatus.VERIFIED) {
             throw new IllegalStateException(
-                    "A maintenance record requires a completed "
-                            + "or verified work order"
+                    "A maintenance record requires a previously completed repair"
             );
         }
 

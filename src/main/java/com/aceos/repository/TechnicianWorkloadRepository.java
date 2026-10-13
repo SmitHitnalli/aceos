@@ -16,12 +16,13 @@ public final class TechnicianWorkloadRepository {
                 SELECT u.user_id,u.name,u.email,
                     COALESCE(w.waiting,0) waiting,COALESCE(w.started,0) started,
                     COALESCE(w.verification,0) verification,
+                    COALESCE(w.corrections,0) corrections,
                     COALESCE(i.scheduled,0) scheduled,COALESCE(i.overdue,0) overdue
                 FROM users u JOIN user_accounts a ON a.user_id=u.user_id
                 LEFT JOIN (
                     SELECT technician_user_id,
                         SUM(status='ASSIGNED') waiting,SUM(status='IN_PROGRESS') started,
-                        SUM(status='COMPLETED') verification
+                        SUM(status='COMPLETED') verification,SUM(status='RETURNED') corrections
                     FROM work_orders GROUP BY technician_user_id
                 ) w ON w.technician_user_id=u.user_id
                 LEFT JOIN (
@@ -38,7 +39,7 @@ public final class TechnicianWorkloadRepository {
                 while (r.next()) result.add(new TechnicianWorkload(
                         new User(r.getInt("user_id"),r.getString("name"),r.getString("email"),UserRole.TECHNICIAN),
                         r.getInt("waiting"),r.getInt("started"),r.getInt("verification"),
-                        r.getInt("scheduled"),r.getInt("overdue")));
+                        r.getInt("scheduled"),r.getInt("overdue"),r.getInt("corrections")));
             }
         }
         return List.copyOf(result);

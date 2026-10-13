@@ -134,7 +134,7 @@ public final class AvailabilityRepository {
                 SELECT h.hold_id,w.work_order_id,0,m.action_taken,w.verified_at
                 FROM asset_safety_holds h JOIN complaints c ON c.asset_id=h.asset_id
                 JOIN work_orders w ON w.complaint_id=c.complaint_id
-                JOIN maintenance_records m ON m.work_order_id=w.work_order_id
+                JOIN maintenance_records m ON m.work_order_id=w.work_order_id AND m.maintenance_record_id=w.verified_submission_id
                 WHERE h.asset_id=? AND h.cleared_at IS NULL AND w.status='VERIFIED' AND w.verified_at>h.created_at
                 ORDER BY hold_id,at DESC,id DESC
                 """;

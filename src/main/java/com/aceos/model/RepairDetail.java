@@ -4,8 +4,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /** One authorized snapshot of a complaint and its linked repair. */
-public record RepairDetail(Complaint complaint, WorkOrder work, String actionTaken, List<Event> timeline, List<ComplaintNote> notes) {
-    public RepairDetail { timeline = List.copyOf(timeline); notes = List.copyOf(notes); }
+public record RepairDetail(Complaint complaint, WorkOrder work, String actionTaken, List<Event> timeline,
+        List<ComplaintNote> notes, List<RepairSubmission> submissions) {
+    public RepairDetail { timeline = List.copyOf(timeline); notes = List.copyOf(notes); submissions=List.copyOf(submissions); }
+    public RepairDetail(Complaint complaint, WorkOrder work, String actionTaken, List<Event> timeline, List<ComplaintNote> notes) {
+        this(complaint,work,actionTaken,timeline,notes,List.of());
+    }
     public RepairDetail(Complaint complaint, WorkOrder work, String actionTaken, List<Event> timeline) {
         this(complaint,work,actionTaken,timeline,List.of());
     }

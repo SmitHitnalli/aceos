@@ -31,22 +31,25 @@ public class MaintenanceRecordRepository {
                 INSERT INTO maintenance_records (
                     work_order_id,
                     action_taken,
-                    recorded_at
+                    recorded_at, submitted_by_user_id, author_name, author_role
                 )
                 SELECT
                     work_order_id,
                     ?,
-                    ?
+                    ?, ?, ?, 'TECHNICIAN'
                 FROM work_orders
                 WHERE work_order_id = ?
                   AND status = 'COMPLETED'
+                  AND current_submission_id IS NULL
                 """;
 
         try (PreparedStatement statement =
                 connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, maintenanceRecord.getActionTaken());
             statement.setTimestamp(2, Timestamp.valueOf(maintenanceRecord.getRecordedAt()));
-            statement.setInt(3, maintenanceRecord.getWorkOrder().getWorkOrderId());
+            statement.setInt(3, Scope.user().getUserId());
+            statement.setString(4, Scope.user().getName());
+            statement.setInt(5, maintenanceRecord.getWorkOrder().getWorkOrderId());
 
             int affectedRows = statement.executeUpdate();
 
@@ -57,8 +60,13 @@ public class MaintenanceRecordRepository {
 
             try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
+                    int id=generatedKeys.getInt(1);
+                    if(com.aceos.security.SecurityRepository.update(
+                            "UPDATE work_orders SET current_submission_id=? WHERE work_order_id=? AND current_submission_id IS NULL AND status='COMPLETED'",
+                            id,maintenanceRecord.getWorkOrder().getWorkOrderId())!=1)
+                        throw new SQLException("The first completion changed; refresh before retrying");
                     return new MaintenanceRecord(
-                            generatedKeys.getInt(1),
+                            id,
                             maintenanceRecord.getWorkOrder(),
                             maintenanceRecord.getActionTaken(),
                             maintenanceRecord.getRecordedAt());

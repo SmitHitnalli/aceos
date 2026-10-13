@@ -32,6 +32,7 @@ final class TechnicianSelector extends VBox {
         return w.technician().getName() + " · #" + w.technician().getUserId()
                 + (w.technician().getUserId() == currentId ? " · current" : "")
                 + "\n" + w.awaitingStart() + " waiting · " + w.inProgress() + " started"
+                + " · " + w.returnedForCorrection() + " corrections"
                 + " · inspections " + w.scheduledInspections();
     }
 
@@ -43,6 +44,7 @@ final class TechnicianSelector extends VBox {
                 + "\nRepairs awaiting start: " + w.awaitingStart()
                 + "\nRepairs in progress: " + w.inProgress()
                 + "\nAwaiting verification: " + w.awaitingVerification()
+                + "\nReturned for correction: " + w.returnedForCorrection()
                 + "\nScheduled inspections: " + w.scheduledInspections()
                 + "\nOverdue inspections: " + w.overdueInspections());
     }

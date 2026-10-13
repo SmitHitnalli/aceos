@@ -317,14 +317,16 @@ class UiSmokeTest {
                         ((javafx.scene.control.Button) workspace.lookup("#shell-menu")).fire();
                         if (workspace.getLeft() == null) ((javafx.scene.control.Button) workspace.lookup("#shell-menu")).fire();
                         workspace.applyCss(); workspace.layout();
-                        String sidebarRoute = role == com.aceos.model.UserRole.ADMINISTRATOR ? switch (destination) {
+                        String sidebarRoute = destination.equals("corrections") ? "jobs" : role == com.aceos.model.UserRole.ADMINISTRATOR ? switch (destination) {
                             case "review", "assign" -> "complaints"; case "verify" -> "jobs";
                             case "assignments", "overdue-inspections", "schedule-inspection" -> "inspections";
                             case "availability", "register" -> "assets";
                             case "overdue-schedules", "create-schedule", "schedule-directory" -> "schedules";
                             case "users" -> "accounts"; default -> destination;
                         } : destination;
-                        assertTrue(workspace.lookup("#nav-" + sidebarRoute).getStyleClass().contains("nav-active"));
+                        var parentTab=workspace.lookup("#nav-" + sidebarRoute);
+                        assertNotNull(parentTab,"Dashboard shortcut must highlight an existing parent tab: "+destination);
+                        assertTrue(parentTab.getStyleClass().contains("nav-active"));
                     }
                     if (role != com.aceos.model.UserRole.ADMINISTRATOR) {
                         assertThrows(IllegalArgumentException.class, () -> workspace.navigate("accounts"));
@@ -448,6 +450,9 @@ class UiSmokeTest {
             write(); assertEquals(51, id);
             work.verify(new com.aceos.model.User(1, "Admin", "admin@aceos.local", com.aceos.model.UserRole.ADMINISTRATOR)); return work;
         }
+        @Override public com.aceos.model.WorkOrder verifyRepairSubmission(int id,int submission) throws com.aceos.service.AceOsServiceException {
+            return verifyWorkOrder(id);
+        }
         @Override public com.aceos.model.Complaint submitComplaint(int id, String input, com.aceos.model.ComplaintPriority priority) throws com.aceos.service.AceOsServiceException {
             write(); assertEquals(11, id); assertEquals("Cooling failure", input); assertEquals(com.aceos.model.ComplaintPriority.HIGH, priority); return complaint;
         }
@@ -462,6 +467,167 @@ class UiSmokeTest {
         FutureTask<Void> task = new FutureTask<>(operation); Platform.runLater(task); task.get(15, TimeUnit.SECONDS);
     }
     private void fire(Region root, String id) { ((javafx.scene.control.Button) root.lookup("#" + id)).fire(); }
+
+    private static class CorrectionPreview extends AceOsService {
+        final FlowPreview fixture;
+        final com.aceos.model.UserRole role;
+        volatile java.util.List<com.aceos.model.RepairSubmission> submissions;
+        volatile boolean failWrite,failRead,failAfterSave;
+        volatile CountDownLatch gate;
+        final java.util.concurrent.atomic.AtomicInteger writes=new java.util.concurrent.atomic.AtomicInteger();
+        CorrectionPreview(com.aceos.model.UserRole role,boolean returned) {
+            this.role=role;fixture=new FlowPreview(role,true);fixture.work.start();fixture.work.complete();
+            var at=fixture.work.getCompletedAt();
+            submissions=java.util.List.of(new com.aceos.model.RepairSubmission(101,1,"Original work submitted",at,
+                    5,"Technician", "TECHNICIAN",returned?"Returned":"Awaiting review",returned?201:0,
+                    returned?"RETURN":null,returned?1:null,returned?"Administrator":null,returned?"ADMINISTRATOR":null,
+                    returned?"Cooling still fails under load":null,returned?at.plusSeconds(1):null));
+            state(returned?com.aceos.model.WorkOrderStatus.RETURNED:com.aceos.model.WorkOrderStatus.COMPLETED,101,0);
+        }
+        void state(com.aceos.model.WorkOrderStatus status,int current,int verified) {
+            var w=fixture.work;fixture.work=new com.aceos.model.WorkOrder(51,fixture.complaint,fixture.technician,status,
+                    w.getAssignedAt(),w.getStartedAt(),w.getCompletedAt(),verified==0?null:w.getCompletedAt().plusSeconds(10),current,verified);
+        }
+        @Override public com.aceos.model.User signedInUser() {
+            return new com.aceos.model.User(role==com.aceos.model.UserRole.REQUESTER?3:role==com.aceos.model.UserRole.TECHNICIAN?5:1,
+                    "Example participant","example@aceos.local",role);
+        }
+        @Override public com.aceos.model.DashboardSummary getDashboardSummary(){
+            assertFalse(Platform.isFxApplicationThread());return new com.aceos.model.DashboardSummary(java.util.Map.of("corrections",1),java.util.List.of());
+        }
+        @Override public java.util.List<com.aceos.model.WorkOrder> getAllWorkOrders(){assertFalse(Platform.isFxApplicationThread());return java.util.List.of(fixture.work);}
+        @Override public com.aceos.model.RepairDetail getWorkDetail(int id) throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread());assertEquals(51,id);
+            if(failRead)throw new com.aceos.service.AceOsServiceException("Example read failure");
+            return new com.aceos.model.RepairDetail(fixture.complaint,fixture.work,submissions.getLast().actionTaken(),
+                    java.util.List.of(new com.aceos.model.RepairDetail.Event("Repair first completed",fixture.work.getCompletedAt())),java.util.List.of(),submissions);
+        }
+        void write() throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread());writes.incrementAndGet();
+            if(gate!=null)try{gate.await(5,TimeUnit.SECONDS);}catch(InterruptedException e){throw new RuntimeException(e);}
+            if(failWrite)throw new com.aceos.service.AceOsServiceException("Example correction failure");
+            if(failAfterSave)failRead=true;
+        }
+        @Override public com.aceos.model.WorkOrder returnRepair(int id,int expected,String reason) throws com.aceos.service.AceOsServiceException {
+            assertEquals(com.aceos.model.UserRole.ADMINISTRATOR,role);assertEquals(51,id);assertEquals(101,expected);write();
+            var s=submissions.getFirst();submissions=java.util.List.of(new com.aceos.model.RepairSubmission(s.recordId(),s.number(),s.actionTaken(),s.at(),
+                    s.authorId(),s.authorName(),s.authorRole(),"Returned",201,"RETURN",1,"Administrator","ADMINISTRATOR",reason,s.at().plusSeconds(1)));
+            state(com.aceos.model.WorkOrderStatus.RETURNED,101,0);return fixture.work;
+        }
+        @Override public com.aceos.model.MaintenanceRecord resubmitRepair(int id,int expected,int review,String action) throws com.aceos.service.AceOsServiceException {
+            assertEquals(com.aceos.model.UserRole.TECHNICIAN,role);assertEquals(51,id);assertEquals(101,expected);assertEquals(201,review);write();
+            submissions=java.util.List.of(submissions.getFirst(),new com.aceos.model.RepairSubmission(102,2,action,submissions.getFirst().at().plusSeconds(2),
+                    5,"Technician","TECHNICIAN","Awaiting review",0,null,null,null,null,null,null));
+            state(com.aceos.model.WorkOrderStatus.COMPLETED,102,0);return null;
+        }
+        @Override public com.aceos.model.WorkOrder verifyRepairSubmission(int id,int expected) throws com.aceos.service.AceOsServiceException {
+            assertEquals(com.aceos.model.UserRole.ADMINISTRATOR,role);assertEquals(101,expected);write();fixture.work.verify(signedInUser());
+            var s=submissions.getFirst();submissions=java.util.List.of(new com.aceos.model.RepairSubmission(s.recordId(),s.number(),s.actionTaken(),s.at(),
+                    s.authorId(),s.authorName(),s.authorRole(),"Verified",202,"VERIFY",1,"Administrator","ADMINISTRATOR",null,s.at().plusSeconds(10)));
+            state(com.aceos.model.WorkOrderStatus.VERIFIED,101,101);return fixture.work;
+        }
+    }
+
+    @Test
+    void repairCorrectionDraftFailureDuplicateAndSavedReadRecovery() throws Exception {
+        for(boolean technician:new boolean[]{false,true}) {
+            var preview=new CorrectionPreview(technician?com.aceos.model.UserRole.TECHNICIAN:com.aceos.model.UserRole.ADMINISTRATOR,technician);
+            String field=technician?"repair-correction":"repair-return-reason",action=technician?"repair-resubmit":"repair-return";
+            String success=technician?"Correction submitted":"Repair returned";
+            var reference=new java.util.concurrent.atomic.AtomicReference<RepairFlowView>();
+            fx(() -> {var root=new RepairFlowView(preview,true,null,51);reference.set(root);new Scene(root,800,520);return null;});awaitControl(reference.get(),"repair-refresh");
+            fx(() -> {fire(reference.get(),action);assertEquals(0,preview.writes.get());
+                ((javafx.scene.control.TextArea)reference.get().lookup("#"+field)).setText("Retained action draft");
+                ((javafx.scene.control.TextArea)reference.get().lookup("#repair-comment")).setText("Unrelated comment draft");return null;});
+            preview.failWrite=true;preview.gate=new CountDownLatch(1);
+            fx(() -> {fire(reference.get(),action);fire(reference.get(),action);assertTrue(reference.get().lookup("#"+field).isDisabled());
+                answerDeparture(false);assertFalse(com.aceos.ui.NavigationGuard.allowLeave(reference.get()));return null;});
+            preview.gate.countDown();awaitControl(reference.get(),"repair-refresh");preview.gate=null;
+            fx(() -> {assertEquals(1,preview.writes.get());assertEquals("Retained action draft",((javafx.scene.control.TextArea)reference.get().lookup("#"+field)).getText());
+                assertTrue(reference.get().lookup("#"+action).isDisabled());return null;});
+            preview.failWrite=false;fx(() -> {fire(reference.get(),"repair-refresh");return null;});awaitControl(reference.get(),"repair-refresh");
+            preview.failAfterSave=true;fx(() -> {fire(reference.get(),action);return null;});awaitControl(reference.get(),"repair-refresh");
+            fx(() -> {assertTrue(((javafx.scene.control.Label)reference.get().lookup("#repair-feedback")).getText().contains(success));assertEquals(2,preview.writes.get());return null;});
+            preview.failRead=false;preview.failAfterSave=false;
+            fx(() -> {fire(reference.get(),"repair-refresh");return null;});awaitControl(reference.get(),"repair-refresh");
+            fx(() -> {assertEquals(2,preview.writes.get());assertNull(reference.get().lookup("#"+action));
+                assertEquals("Unrelated comment draft",((javafx.scene.control.TextArea)reference.get().lookup("#repair-comment")).getText());return null;});
+        }
+    }
+
+    @Test
+    void repairCorrectionRoleShellHistoryActionsAndSupportedLayouts() throws Exception {
+        for(var role:com.aceos.model.UserRole.values())for(boolean returned:new boolean[]{false,true})for(int[] size:new int[][]{{800,520},{1280,800}}) {
+            var preview=new CorrectionPreview(role,returned);var reference=new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+            fx(() -> {var root=new com.aceos.ui.WorkspaceView(preview,()->{},()->{});reference.set(root);new Scene(root,size[0],size[1]);
+                root.navigate("jobs");return null;});awaitControl(reference.get(),"repair-refresh");
+            fx(() -> {((javafx.scene.control.TableView<?>)reference.get().lookup("#repair-table")).getSelectionModel().selectFirst();
+                fire(reference.get(),"repair-open");return null;});awaitControl(reference.get(),"repair-refresh");
+            fx(() -> {var root=reference.get();
+                assertEquals(role==com.aceos.model.UserRole.ADMINISTRATOR && !returned,root.lookup("#repair-return")!=null);
+                assertEquals(role==com.aceos.model.UserRole.ADMINISTRATOR && !returned,root.lookup("#repair-verify")!=null);
+                assertEquals(role==com.aceos.model.UserRole.TECHNICIAN && returned,root.lookup("#repair-resubmit")!=null);
+                assertNull(root.lookup("#repair-assign"));assertNull(root.lookup("#repair-start"));
+                snapshot(root,size,"correction-shell-"+role.name().toLowerCase()+"-"+returned+"-top",true);
+                var scroll=(javafx.scene.control.ScrollPane)root.lookup("#repair-flow");scroll.setVvalue(1);root.applyCss();root.layout();
+                snapshot(root,size,"correction-shell-"+role.name().toLowerCase()+"-"+returned+"-bottom",true);return null;});
+        }
+        var preview=new CorrectionPreview(com.aceos.model.UserRole.TECHNICIAN,true);var shell=new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+        fx(() -> {var root=new com.aceos.ui.WorkspaceView(preview,()->{},()->{});shell.set(root);new Scene(root,800,520);return null;});awaitControl(shell.get(),"dashboard-refresh");
+        fx(() -> {shell.get().navigate("corrections");return null;});awaitControl(shell.get(),"repair-refresh");
+        fx(() -> {assertEquals("RETURNED",((javafx.scene.control.ComboBox<?>)shell.get().lookup("#repair-status")).getValue());return null;});
+    }
+
+    @Test
+    void repairVerificationPreservesOtherDraftsAndClosedHistoryThroughRecovery() throws Exception {
+        var preview=new CorrectionPreview(com.aceos.model.UserRole.ADMINISTRATOR,false);
+        var reference=new java.util.concurrent.atomic.AtomicReference<RepairFlowView>();
+        fx(() -> {var root=new RepairFlowView(preview,true,null,51);reference.set(root);new Scene(root,800,520);return null;});awaitControl(reference.get(),"repair-refresh");
+        fx(() -> {
+            ((javafx.scene.control.TextArea)reference.get().lookup("#repair-return-reason")).setText("Keep this unused return draft");
+            ((javafx.scene.control.TextArea)reference.get().lookup("#repair-comment")).setText("Keep this unsent comment");
+            preview.failWrite=true;fire(reference.get(),"repair-verify");return null;
+        });awaitControl(reference.get(),"repair-refresh");
+        fx(() -> {assertEquals("Keep this unused return draft",((javafx.scene.control.TextArea)reference.get().lookup("#repair-return-reason")).getText());
+            assertTrue(reference.get().lookup("#repair-verify").isDisabled());fire(reference.get(),"repair-refresh");return null;});awaitControl(reference.get(),"repair-refresh");
+        preview.failWrite=false;preview.failAfterSave=true;preview.gate=new CountDownLatch(1);
+        fx(() -> {fire(reference.get(),"repair-verify");fire(reference.get(),"repair-verify");answerDeparture(false);
+            assertFalse(com.aceos.ui.NavigationGuard.allowLeave(reference.get()));return null;});
+        preview.gate.countDown();awaitControl(reference.get(),"repair-refresh");preview.gate=null;
+        fx(() -> {assertTrue(((javafx.scene.control.Label)reference.get().lookup("#repair-feedback")).getText().contains("Repair verified; complaint resolved"));return null;});
+        preview.failRead=false;preview.failAfterSave=false;fx(() -> {fire(reference.get(),"repair-refresh");return null;});awaitControl(reference.get(),"repair-refresh");
+        fx(() -> {
+            var root=reference.get();assertEquals(2,preview.writes.get());assertNull(root.lookup("#repair-verify"));assertNull(root.lookup("#repair-return"));assertNull(root.lookup("#repair-comment-save"));
+            var reason=(javafx.scene.control.TextArea)root.lookup("#repair-return-reason");assertFalse(reason.isEditable());assertEquals("Keep this unused return draft",reason.getText());
+            var comment=(javafx.scene.control.TextArea)root.lookup("#repair-comment");assertFalse(comment.isEditable());assertEquals("Keep this unsent comment",comment.getText());
+            assertTrue(root.lookupAll(".label").stream().anyMatch(n -> ((javafx.scene.control.Label)n).getText().contains("Verified")));
+            answerDeparture(false);fire(root,"repair-back");assertNotNull(root.lookup("#repair-return-reason"));
+            answerDeparture(true);fire(root,"repair-back");return null;
+        });awaitControl(reference.get(),"repair-refresh");
+        assertEquals(2,preview.writes.get());
+    }
+
+    @Test
+    void repairCorrectionActionsHistoryAndKeyboardFocusReachableAtSupportedSizes() throws Exception {
+        for(boolean technician:new boolean[]{false,true})for(int[] size:new int[][]{{800,520},{1280,800}}) {
+            var preview=new CorrectionPreview(technician?com.aceos.model.UserRole.TECHNICIAN:com.aceos.model.UserRole.ADMINISTRATOR,technician);
+            var reference=new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+            fx(() -> {var root=new com.aceos.ui.WorkspaceView(preview,()->{},()->{});reference.set(root);new Scene(root,size[0],size[1]);root.navigate("jobs");return null;});awaitControl(reference.get(),"repair-refresh");
+            fx(() -> {((javafx.scene.control.TableView<?>)reference.get().lookup("#repair-table")).getSelectionModel().selectFirst();fire(reference.get(),"repair-open");return null;});awaitControl(reference.get(),"repair-refresh");
+            fx(() -> {
+                var root=reference.get();String id=technician?"repair-resubmit":"repair-verify";
+                var button=(javafx.scene.control.Button)root.lookup("#"+id);assertTrue(button.isFocusTraversable());assertFalse(button.isDisabled());
+                var scroll=(javafx.scene.control.ScrollPane)root.lookup("#repair-flow");scroll.setVvalue(1);root.applyCss();root.layout();
+                var bounds=button.localToScene(button.getBoundsInLocal());assertTrue(bounds.getMinY()>=112 && bounds.getMaxY()<=size[1]);
+                String field=technician?"repair-correction":"repair-return-reason";
+                assertTrue(root.lookupAll(".label").stream().anyMatch(n -> n instanceof javafx.scene.control.Label l && l.getLabelFor()==root.lookup("#"+field)));
+                assertTrue(root.lookupAll(".label").stream().anyMatch(n -> ((javafx.scene.control.Label)n).getText().contains("Submission 1")));
+                if(technician)assertTrue(root.lookupAll(".label").stream().anyMatch(n -> ((javafx.scene.control.Label)n).getText().equals("Cooling still fails under load")));
+                button.requestFocus();assertSame(button,root.getScene().getFocusOwner());
+                snapshot(root,size,"correction-action-focus-"+technician,true);return null;
+            });
+        }
+    }
 
     private void awaitControl(Region root, String id) throws Exception {
         awaitFx(() -> {

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="520" height="680" preserveAspectRatio="xMinYMin meet" viewBox="0 0 520 680" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>...</title>
+	<desc>...</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="520" height="680"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-680)" style="clip-path: url(#clip)">
+		<g transform="">
+			<text x="10" y="660" style="font-family: ArialBold; font-size: 13px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,1320) scale(1,-1)">Accounts audit and infrastructure</text>
+			<polyline points="205 545, 110 500, 110 475" style="stroke: rgb(38%,45%,54%); stroke-linecap: butt; stroke-width: 1.1; fill: None; fill-rule: evenodd;"/>
+			<text x="14" y="510" style="font-family: Arial; font-size: 8px;fill: rgb(14%,23%,31%); stroke:none;" transform="translate(0,1020) scale(1,-1)">user 1 to 0..1 account</text>
+			<polyline points="315 545, 410 500, 410 475" style="stroke: rgb(38%,45%,54%); stroke-linecap: butt; stroke-width: 1.1; fill: None; fill-rule: evenodd;"/>
+			<text x="354" y="510" style="font-family: Arial; font-size: 8px;fill: rgb(14%,23%,31%); stroke:none;" transform="translate(0,1020) scale(1,-1)">actor 0..1 per audit</text>
+			<rect x="165" y="545" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="165" y="607" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="173" y="615" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,1230) scale(1,-1)">users</text>
+			<text x="173" y="593" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,1186) scale(1,-1)">PK user_id</text>
+			<text x="173" y="580" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,1160) scale(1,-1)">Domain identity and current role</text>
+			<rect x="15" y="390" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="15" y="452" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="23" y="460" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,920) scale(1,-1)">user_accounts</text>
+			<text x="23" y="438" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,876) scale(1,-1)">PK/FK user_id; UQ login_email</text>
+			<text x="23" y="425" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,850) scale(1,-1)">Credential and account state</text>
+			<text x="23" y="412" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,824) scale(1,-1)">Cooldown and auth_version</text>
+			<rect x="315" y="390" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="315" y="452" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="323" y="460" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,920) scale(1,-1)">action_audit</text>
+			<text x="323" y="438" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,876) scale(1,-1)">PK audit_id; nullable FK actor</text>
+			<text x="323" y="425" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,850) scale(1,-1)">Action plus event-specific target_id</text>
+			<text x="323" y="412" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,824) scale(1,-1)">Recorded timestamp</text>
+			<rect x="15" y="210" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="15" y="272" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="23" y="280" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,560) scale(1,-1)">schema_migrations</text>
+			<text x="23" y="258" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,516) scale(1,-1)">PK version</text>
+			<text x="23" y="245" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,490) scale(1,-1)">Resource checksum and completion</text>
+			<text x="23" y="232" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,464) scale(1,-1)">No entity FK</text>
+			<rect x="315" y="210" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="315" y="272" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="323" y="280" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,560) scale(1,-1)">security_gate</text>
+			<text x="323" y="258" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,516) scale(1,-1)">PK gate_id</text>
+			<text x="323" y="245" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,490) scale(1,-1)">Local coordination row 1</text>
+			<text x="323" y="232" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,464) scale(1,-1)">No entity FK</text>
+			<rect x="165" y="50" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="165" y="112" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="173" y="120" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,240) scale(1,-1)">operator_setup</text>
+			<text x="173" y="98" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,196) scale(1,-1)">PK setup_id</text>
+			<text x="173" y="85" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,170) scale(1,-1)">Operator-only coordination row 1</text>
+			<text x="173" y="72" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,144) scale(1,-1)">No entity FK</text>
+			<text x="10" y="14" style="font-family: Arial; font-size: 7.5px;fill: rgb(26%,32%,41%); stroke:none;" transform="translate(0,28) scale(1,-1)">target_id has no universal FK. Infrastructure rows are not linked to entities.</text>
+		</g>
+	</g>
+</svg>

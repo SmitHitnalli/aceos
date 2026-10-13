@@ -137,6 +137,7 @@ public final class AssetProfileView extends ScrollPane {
                 text(profile.role() == UserRole.REQUESTER ? "Your complaint completion history" : "Technical maintenance history", "section-title"));
         if (profile.maintenance().isEmpty()) details.getChildren().add(text("No authorized maintenance records for this asset.", "muted"));
         for (var m : profile.maintenance()) details.getChildren().add(text("Record #" + m.recordId() + " · repair #" + m.workOrderId()
+                + " · submission " + m.submissionNumber() + " · " + m.disposition()
                 + " · " + m.recordedAt() + "\n" + m.actionTaken(), ""));
         if (profile.role() == UserRole.ADMINISTRATOR) {
             details.getChildren().add(text("Safety hold history", "section-title"));

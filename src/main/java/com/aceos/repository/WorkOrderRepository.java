@@ -72,7 +72,7 @@ public class WorkOrderRepository {
 
                     case COMPLETED -> persistCompletion(connection, workOrder);
 
-                    case VERIFIED -> persistVerification(connection, workOrder);
+                    case VERIFIED -> throw new IllegalArgumentException("Verification requires an exact submission review");
 
                     default ->
                             throw new IllegalArgumentException(
@@ -102,6 +102,8 @@ public class WorkOrderRepository {
                     w.started_at,
                     w.completed_at,
                     w.verified_at,
+                    w.current_submission_id,
+                    w.verified_submission_id,
 
                     c.complaint_id,
                     c.description,
@@ -165,6 +167,8 @@ public class WorkOrderRepository {
                     w.started_at,
                     w.completed_at,
                     w.verified_at,
+                    w.current_submission_id,
+                    w.verified_submission_id,
 
                     c.complaint_id,
                     c.description,
@@ -263,7 +267,8 @@ public class WorkOrderRepository {
                 resultSet.getTimestamp("assigned_at").toLocalDateTime(),
                 getNullableTimestamp(resultSet, "started_at"),
                 getNullableTimestamp(resultSet, "completed_at"),
-                getNullableTimestamp(resultSet, "verified_at"));
+                getNullableTimestamp(resultSet, "verified_at"),
+                resultSet.getInt("current_submission_id"),resultSet.getInt("verified_submission_id"));
     }
 
     private static int insertWorkOrder(Connection connection, WorkOrder workOrder)

@@ -1,6 +1,7 @@
 # Maven build output
 target/
 .local/
+output/releases/
 
 # Compiled Java files
 *.class

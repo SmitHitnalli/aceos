@@ -23,9 +23,10 @@ public final class DashboardSummaryRepository {
             count(counts, "assigned", "SELECT COUNT(*) FROM work_orders WHERE technician_user_id=? AND status='ASSIGNED'", actor);
             count(counts, "started", "SELECT COUNT(*) FROM work_orders WHERE technician_user_id=? AND status='IN_PROGRESS'", actor);
             count(counts, "completed", "SELECT COUNT(*) FROM work_orders WHERE technician_user_id=? AND status='COMPLETED'", actor);
+            count(counts, "corrections", "SELECT COUNT(*) FROM work_orders WHERE technician_user_id=? AND status='RETURNED'", actor);
             count(counts, "inspections", "SELECT COUNT(*) FROM asset_inspections WHERE assigned_to_user_id=? AND status='SCHEDULED'", actor);
             count(counts, "overdueInspections", "SELECT COUNT(*) FROM asset_inspections WHERE assigned_to_user_id=? AND status='SCHEDULED' AND scheduled_date<CURRENT_DATE", actor);
-            rows(items, "Work order", "SELECT w.work_order_id id,a.name asset,w.status,CONCAT('Complaint #',c.complaint_id,' · ',c.priority) detail FROM work_orders w JOIN complaints c ON c.complaint_id=w.complaint_id JOIN assets a ON a.asset_id=c.asset_id WHERE w.technician_user_id=? AND w.status<>'VERIFIED' ORDER BY FIELD(w.status,'IN_PROGRESS','ASSIGNED','COMPLETED'),w.work_order_id LIMIT 6", actor);
+            rows(items, "Work order", "SELECT w.work_order_id id,a.name asset,w.status,CONCAT('Complaint #',c.complaint_id,' · ',c.priority) detail FROM work_orders w JOIN complaints c ON c.complaint_id=w.complaint_id JOIN assets a ON a.asset_id=c.asset_id WHERE w.technician_user_id=? AND w.status<>'VERIFIED' ORDER BY FIELD(w.status,'RETURNED','IN_PROGRESS','ASSIGNED','COMPLETED'),w.work_order_id LIMIT 6", actor);
             rows(items, "Inspection", "SELECT i.inspection_id id,a.name asset,i.status,CONCAT(i.inspection_type,' · Due ',i.scheduled_date) detail FROM asset_inspections i JOIN assets a ON a.asset_id=i.asset_id WHERE i.assigned_to_user_id=? AND i.status='SCHEDULED' ORDER BY i.scheduled_date,i.inspection_id LIMIT 6", actor);
         } else {
             count(counts, "review", "SELECT COUNT(*) FROM complaints WHERE status='SUBMITTED'");

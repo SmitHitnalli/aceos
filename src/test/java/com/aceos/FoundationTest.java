@@ -55,6 +55,8 @@ class FoundationTest {
     void fixture() throws Exception {
         try (Connection c = operator();
                 Statement s = c.createStatement()) {
+            s.executeUpdate("DELETE FROM repair_reviews");
+            s.executeUpdate("UPDATE work_orders SET current_submission_id=NULL,verified_submission_id=NULL");
             for (String table :
                     List.of(
                             "complaint_notes",
@@ -108,6 +110,217 @@ class FoundationTest {
 
     Asset asset(String code) throws Exception {
         return admin.registerAsset(code, code, "Test", "Local test");
+    }
+
+    @Test
+    void repairCorrectionsPreserveEvidenceRolesCountsAndFinalVerification() throws Exception {
+        var a=asset("CORRECTION-CYCLES");var w=assigned(a);
+        technician.startWorkOrder(w.getWorkOrderId());
+        var first=technician.completeWorkOrder(w.getWorkOrderId(),"Original completion");
+        var initial=admin.getWorkOrder(w.getWorkOrderId());
+        for(var who:List.of(requester,otherRequester,technician,otherTechnician,new AceOsService()))
+            denied(() -> who.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId(),"Needs correction"));
+        denied(() -> admin.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId()," "));
+        denied(() -> admin.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId(),"😀".repeat(2001)));
+        String reason="😀".repeat(2000);
+        admin.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId(),reason);
+        var returned=requester.getWorkDetail(w.getWorkOrderId());
+        var s=returned.submissions().getFirst();assertEquals(reason,s.reason());assertEquals("Returned",s.disposition());
+        assertEquals(1,s.reviewerId());assertEquals("ADMINISTRATOR",s.reviewerRole());
+        assertEquals(WorkOrderStatus.RETURNED,returned.work().getStatus());
+        assertEquals(1,technician.getDashboardSummary().counts().get("corrections"));
+        assertEquals(0,admin.getDashboardSummary().counts().get("verification"));
+        assertEquals(1,admin.getTechnicianWorkloads().stream().filter(x -> x.technician().getUserId()==5).findFirst().orElseThrow().returnedForCorrection());
+        denied(() -> admin.verifyWorkOrder(w.getWorkOrderId()));
+        denied(() -> admin.reassignWorkOrder(w.getWorkOrderId(),6));
+        denied(() -> admin.deactivateAccount(5));
+        denied(() -> admin.changeAccountRole(5,UserRole.REQUESTER));
+        denied(() -> admin.changeAssetLifecycle(a.getAssetId(),ManualLifecycle.ACTIVE,ManualLifecycle.RETIRED,"Retire"));
+        for(var who:List.of(admin,requester,otherTechnician,new AceOsService()))
+            denied(() -> who.resubmitRepair(w.getWorkOrderId(),s.recordId(),s.reviewId(),"Correction"));
+        denied(() -> technician.resubmitRepair(w.getWorkOrderId(),s.recordId(),s.reviewId()," "));
+        var second=technician.resubmitRepair(w.getWorkOrderId(),s.recordId(),s.reviewId(),"Correction one");
+        denied(() -> admin.verifyWorkOrder(w.getWorkOrderId()));
+        denied(() -> admin.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId(),"Stale return"));
+        denied(() -> admin.verifyRepairSubmission(w.getWorkOrderId(),first.getMaintenanceRecordId()));
+        admin.returnRepair(w.getWorkOrderId(),second.getMaintenanceRecordId(),"One more correction");
+        var secondReturn=admin.getWorkDetail(w.getWorkOrderId()).submissions().getLast();
+        denied(() -> technician.resubmitRepair(w.getWorkOrderId(),secondReturn.recordId(),s.reviewId(),"Stale return"));
+        var third=technician.resubmitRepair(w.getWorkOrderId(),secondReturn.recordId(),secondReturn.reviewId(),"Final correction");
+        var corrected=admin.getWorkOrder(w.getWorkOrderId());
+        assertEquals(initial.getAssignedAt(),corrected.getAssignedAt());assertEquals(initial.getStartedAt(),corrected.getStartedAt());
+        assertEquals(initial.getCompletedAt(),corrected.getCompletedAt());assertNull(corrected.getVerifiedAt());
+        assertEquals(AssetStatus.UNDER_MAINTENANCE,admin.getAsset(a.getAssetId()).getStatus());
+        admin.verifyRepairSubmission(w.getWorkOrderId(),third.getMaintenanceRecordId());
+        var verified=requester.getWorkDetail(w.getWorkOrderId());
+        assertEquals(ComplaintStatus.RESOLVED,verified.complaint().getStatus());
+        assertEquals(third.getMaintenanceRecordId(),verified.work().getVerifiedSubmissionId());
+        assertEquals(List.of("Returned","Returned","Verified"),verified.submissions().stream().map(RepairSubmission::disposition).toList());
+        assertEquals("Original completion",requester.getMaintenanceRecord(first.getMaintenanceRecordId()).getActionTaken());
+        assertEquals(first.getRecordedAt(),requester.getMaintenanceRecord(first.getMaintenanceRecordId()).getRecordedAt());
+        assertEquals(3,requester.getAssetHistory(a.getAssetId()).size());assertTrue(otherRequester.getAssetHistory(a.getAssetId()).isEmpty());
+        denied(() -> otherTechnician.getWorkDetail(w.getWorkOrderId()));
+        denied(() -> admin.returnRepair(w.getWorkOrderId(),third.getMaintenanceRecordId(),"After verification"));
+        assertEquals(0,technician.getDashboardSummary().counts().get("corrections"));
+        assertEquals(AssetStatus.ACTIVE,admin.getAsset(a.getAssetId()).getStatus());
+    }
+
+    @Test
+    void repairCorrectionRacesAndAtomicRollback() throws Exception {
+        var w=assigned(asset("CORRECTION-RACE"));technician.startWorkOrder(w.getWorkOrderId());
+        var first=technician.completeWorkOrder(w.getWorkOrderId(),"First submission");
+        try(var c=operator();var st=c.createStatement()) {
+            st.execute("ALTER TABLE action_audit ADD CONSTRAINT fail_repair_return CHECK (action<>'REPAIR_RETURNED')");
+            try{denied(() -> admin.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId(),"Return must roll back"));}
+            finally{st.execute("ALTER TABLE action_audit DROP CHECK fail_repair_return");}
+        }
+        assertEquals(WorkOrderStatus.COMPLETED,admin.getWorkOrder(w.getWorkOrderId()).getStatus());
+        assertEquals(0,admin.getWorkDetail(w.getWorkOrderId()).submissions().getFirst().reviewId());
+        admin.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId(),"Correct this");
+        var returned=admin.getWorkDetail(w.getWorkOrderId()).submissions().getFirst();
+        try(var c=operator();var st=c.createStatement()) {
+            st.execute("ALTER TABLE action_audit ADD CONSTRAINT fail_repair_resubmit CHECK (action<>'REPAIR_RESUBMITTED')");
+            try{denied(() -> technician.resubmitRepair(w.getWorkOrderId(),returned.recordId(),returned.reviewId(),"Must roll back"));}
+            finally{st.execute("ALTER TABLE action_audit DROP CHECK fail_repair_resubmit");}
+        }
+        assertEquals(1,admin.getWorkDetail(w.getWorkOrderId()).submissions().size());
+        var pool=Executors.newFixedThreadPool(2);var go=new CountDownLatch(1);
+        try {
+            var one=pool.submit(() -> {go.await();try{technician.resubmitRepair(w.getWorkOrderId(),returned.recordId(),returned.reviewId(),"Correction A");return true;}catch(AceOsServiceException e){return false;}});
+            var two=pool.submit(() -> {go.await();try{technician.resubmitRepair(w.getWorkOrderId(),returned.recordId(),returned.reviewId(),"Correction B");return true;}catch(AceOsServiceException e){return false;}});
+            go.countDown();assertNotEquals(one.get(10,TimeUnit.SECONDS),two.get(10,TimeUnit.SECONDS));
+        } finally {pool.shutdownNow();}
+        assertEquals(2,admin.getWorkDetail(w.getWorkOrderId()).submissions().size());
+        int latest=admin.getWorkOrder(w.getWorkOrderId()).getCurrentSubmissionId();
+        var reviewPool=Executors.newFixedThreadPool(2);var reviewGo=new CountDownLatch(1);
+        try {
+            var one=reviewPool.submit(() -> {reviewGo.await();try{admin.returnRepair(w.getWorkOrderId(),latest,"Return again");return true;}catch(AceOsServiceException e){return false;}});
+            var two=reviewPool.submit(() -> {reviewGo.await();try{admin.verifyRepairSubmission(w.getWorkOrderId(),latest);return true;}catch(AceOsServiceException e){return false;}});
+            reviewGo.countDown();assertNotEquals(one.get(10,TimeUnit.SECONDS),two.get(10,TimeUnit.SECONDS));
+        } finally {reviewPool.shutdownNow();}
+        assertNotEquals(0,admin.getWorkDetail(w.getWorkOrderId()).submissions().getLast().reviewId());
+    }
+
+    @Test
+    void correctionPermissionsSessionsAndCrossWorkEvidenceConstraints() throws Exception {
+        var a=asset("CORRECTION-PERMISSIONS");var w=assigned(a);var other=assigned(a);
+        technician.startWorkOrder(w.getWorkOrderId());technician.startWorkOrder(other.getWorkOrderId());
+        var first=technician.completeWorkOrder(w.getWorkOrderId(),"Original evidence");
+        var foreign=technician.completeWorkOrder(other.getWorkOrderId(),"Foreign evidence");
+        try(var c=operator();var st=c.createStatement()) {
+            assertThrows(SQLException.class,() -> st.executeUpdate("UPDATE work_orders SET current_submission_id="+foreign.getMaintenanceRecordId()+" WHERE work_order_id="+w.getWorkOrderId()));
+            assertThrows(SQLException.class,() -> st.executeUpdate("UPDATE work_orders SET verified_submission_id="+foreign.getMaintenanceRecordId()+" WHERE work_order_id="+w.getWorkOrderId()));
+        }
+        try(var c=DriverManager.getConnection(url,System.getenv("ACEOS_DB_USER"),System.getenv("ACEOS_DB_PASSWORD"));var st=c.createStatement()) {
+            for(String table:List.of("maintenance_records","repair_reviews")) {
+                assertThrows(SQLException.class,() -> st.executeUpdate("UPDATE "+table+" SET recorded_at=recorded_at WHERE 1=0"));
+                assertThrows(SQLException.class,() -> st.executeUpdate("DELETE FROM "+table+" WHERE 1=0"));
+            }
+        }
+        var staleAdmin=login(2);admin.issueCredential(2);
+        denied(() -> staleAdmin.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId(),"Stale session"));
+        denied(() -> staleAdmin.verifyRepairSubmission(w.getWorkOrderId(),first.getMaintenanceRecordId()));
+        admin.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId(),"Correct the original");
+        var r=admin.getWorkDetail(w.getWorkOrderId()).submissions().getFirst();
+        var staleTech=login(5);admin.issueCredential(5);
+        denied(() -> staleTech.resubmitRepair(w.getWorkOrderId(),r.recordId(),r.reviewId(),"Stale session"));
+        assertEquals(WorkOrderStatus.RETURNED,admin.getWorkOrder(w.getWorkOrderId()).getStatus());
+        assertEquals(1,admin.getWorkDetail(w.getWorkOrderId()).submissions().size());
+        admin.signOut();denied(() -> admin.returnRepair(other.getWorkOrderId(),foreign.getMaintenanceRecordId(),"Signed out"));
+        denied(() -> otherRequester.getWorkDetail(w.getWorkOrderId()));
+    }
+
+    @Test
+    void correctionsKeepIndependentHoldsOverlapAndAcceptedEvidenceAuthoritative() throws Exception {
+        var a=asset("CORRECTION-HOLDS");var w=assigned(a);var overlapping=assigned(a);
+        technician.startWorkOrder(w.getWorkOrderId());technician.startWorkOrder(overlapping.getWorkOrderId());
+        inspection(a,InspectionStatus.FAILED);inspection(a,InspectionStatus.FAILED);
+        var holds=admin.getSafetyHolds(a.getAssetId());assertEquals(2,holds.size());
+        var first=technician.completeWorkOrder(w.getWorkOrderId(),"Returned description must not become accepted evidence");
+        admin.returnRepair(w.getWorkOrderId(),first.getMaintenanceRecordId(),"Correct the remaining fault");
+        var returned=admin.getWorkDetail(w.getWorkOrderId()).submissions().getFirst();
+        assertTrue(admin.getAssetProfile(a.getAssetId()).evidence().stream().noneMatch(e -> !e.inspection()));
+        denied(() -> admin.clearSafetyHold(a.getAssetId(),holds.getFirst().holdId(),"Unverified repair",null,w.getWorkOrderId()));
+        var correction=technician.resubmitRepair(w.getWorkOrderId(),returned.recordId(),returned.reviewId(),"Accepted corrective action");
+        assertEquals(AssetStatus.OUT_OF_SERVICE,admin.getAsset(a.getAssetId()).getStatus());
+        admin.verifyRepairSubmission(w.getWorkOrderId(),correction.getMaintenanceRecordId());
+        var evidence=admin.getAssetProfile(a.getAssetId()).evidence().stream().filter(e -> !e.inspection()).toList();
+        assertEquals(2,evidence.size());assertTrue(evidence.stream().allMatch(e -> e.id()==w.getWorkOrderId() && e.description().equals("Accepted corrective action")));
+        assertEquals(2,admin.getSafetyHolds(a.getAssetId()).stream().filter(h -> h.clearedAt()==null).count());
+        admin.clearSafetyHold(a.getAssetId(),holds.getFirst().holdId(),"Verified correction",null,w.getWorkOrderId());
+        assertEquals(AssetStatus.OUT_OF_SERVICE,admin.getAsset(a.getAssetId()).getStatus());
+        inspection(a,InspectionStatus.PASSED);assertEquals(AssetStatus.OUT_OF_SERVICE,admin.getAsset(a.getAssetId()).getStatus());
+        admin.clearSafetyHold(a.getAssetId(),holds.getLast().holdId(),"Verified correction",null,w.getWorkOrderId());
+        assertEquals(AssetStatus.UNDER_MAINTENANCE,admin.getAsset(a.getAssetId()).getStatus());
+        technician.completeWorkOrder(overlapping.getWorkOrderId(),"Independent repair completed");admin.verifyWorkOrder(overlapping.getWorkOrderId());
+        assertEquals(AssetStatus.ACTIVE,admin.getAsset(a.getAssetId()).getStatus());
+    }
+
+    @Test
+    void correctionMigrationUpgradePreflightHistoryAndCompatibility() throws Exception {
+        var a=asset("CORRECTION-UPGRADE");var open=assigned(a);var verified=assigned(a);
+        technician.startWorkOrder(open.getWorkOrderId());technician.startWorkOrder(verified.getWorkOrderId());
+        var first=technician.completeWorkOrder(open.getWorkOrderId(),"Historical unverified action");
+        var accepted=technician.completeWorkOrder(verified.getWorkOrderId(),"Historical verified action");admin.verifyWorkOrder(verified.getWorkOrderId());
+        var openBefore=admin.getWorkOrder(open.getWorkOrderId());var verifiedBefore=admin.getWorkOrder(verified.getWorkOrderId());
+        try(var c=operator();var st=c.createStatement()) {
+            // Reconstruct the pre-V005 shape only in the explicitly disposable fixture schema.
+            st.execute("DROP TABLE repair_reviews");
+            st.execute("ALTER TABLE work_orders DROP FOREIGN KEY fk_work_current_submission, DROP FOREIGN KEY fk_work_verified_submission, DROP COLUMN current_submission_id, DROP COLUMN verified_submission_id, DROP CHECK chk_work_orders_status, ADD CONSTRAINT chk_work_orders_status CHECK (status IN ('ASSIGNED','IN_PROGRESS','COMPLETED','VERIFIED'))");
+            st.execute("ALTER TABLE maintenance_records DROP FOREIGN KEY fk_submission_author, DROP CHECK chk_submission_number, DROP CHECK chk_submission_author, DROP INDEX uq_submission_number, DROP INDEX uq_submission_work_record, DROP COLUMN submission_number, DROP COLUMN submitted_by_user_id, DROP COLUMN author_name, DROP COLUMN author_role, MODIFY recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, ADD CONSTRAINT uq_maintenance_records_work_order UNIQUE(work_order_id)");
+            st.executeUpdate("DELETE FROM schema_migrations WHERE version=5");
+            assertThrows(SQLException.class,() -> Migrations.assertCompatible(c));
+            st.executeUpdate("UPDATE work_orders SET completed_at=NULL WHERE work_order_id="+open.getWorkOrderId());
+            try {
+                assertThrows(SQLException.class,() -> Migrations.migrate(c));
+                try(var r=st.executeQuery("SELECT COUNT(*) FROM schema_migrations WHERE version=5")){r.next();assertEquals(0,r.getInt(1));}
+            } finally {
+                try(var p=c.prepareStatement("UPDATE work_orders SET completed_at=? WHERE work_order_id=?")){p.setTimestamp(1,Timestamp.valueOf(openBefore.getCompletedAt()));p.setInt(2,open.getWorkOrderId());p.executeUpdate();}
+            }
+            Migrations.migrate(c);Migrations.migrate(c);
+            for(String field:List.of("status","checksum")) {
+                st.executeUpdate("UPDATE schema_migrations SET "+field+"="+(field.equals("status")?"'STARTED'":"REPEAT('0',64)")+" WHERE version=5");
+                try{assertThrows(SQLException.class,() -> Migrations.migrate(c));assertThrows(SQLException.class,() -> Migrations.assertCompatible(c));}
+                finally{try(var p=c.prepareStatement("UPDATE schema_migrations SET status='COMPLETE',checksum=? WHERE version=5")){p.setString(1,Migrations.checksum(getClass().getResourceAsStream("/database/V005__repair_corrections.sql").readAllBytes()));p.executeUpdate();}}
+            }
+            st.execute("ALTER TABLE repair_reviews DROP CHECK chk_repair_review_kind, ADD CONSTRAINT chk_repair_review_kind CHECK (kind IN ('RETURN'))");
+            try{assertThrows(SQLException.class,() -> Migrations.assertCompatible(c));}
+            finally{st.execute("ALTER TABLE repair_reviews DROP CHECK chk_repair_review_kind, ADD CONSTRAINT chk_repair_review_kind CHECK (kind IN ('RETURN','VERIFY'))");}
+            st.execute("ALTER TABLE work_orders DROP FOREIGN KEY fk_work_current_submission");
+            try{assertThrows(SQLException.class,() -> Migrations.assertCompatible(c));}
+            finally{st.execute("ALTER TABLE work_orders ADD CONSTRAINT fk_work_current_submission FOREIGN KEY(work_order_id,current_submission_id) REFERENCES maintenance_records(work_order_id,maintenance_record_id)");}
+            st.execute("ALTER TABLE maintenance_records DROP CHECK chk_submission_number, ADD CONSTRAINT chk_submission_number CHECK (submission_number>=0)");
+            try{assertThrows(SQLException.class,() -> Migrations.assertCompatible(c));}
+            finally{st.execute("ALTER TABLE maintenance_records DROP CHECK chk_submission_number, ADD CONSTRAINT chk_submission_number CHECK (submission_number>0)");}
+            st.execute("ALTER TABLE repair_reviews DROP FOREIGN KEY fk_repair_review_record");
+            try{assertThrows(SQLException.class,() -> Migrations.assertCompatible(c));}
+            finally{st.execute("ALTER TABLE repair_reviews ADD CONSTRAINT fk_repair_review_record FOREIGN KEY(maintenance_record_id) REFERENCES maintenance_records(maintenance_record_id)");}
+            Migrations.assertCompatible(c);
+        }
+        var after=admin.getWorkDetail(open.getWorkOrderId());var verifiedAfter=admin.getWorkDetail(verified.getWorkOrderId());
+        assertEquals(first.getMaintenanceRecordId(),after.work().getCurrentSubmissionId());assertEquals(openBefore.getCompletedAt(),after.work().getCompletedAt());
+        assertEquals(first.getRecordedAt(),after.submissions().getFirst().at());assertNull(after.submissions().getFirst().authorId());assertEquals(0,after.submissions().getFirst().reviewId());
+        assertEquals(accepted.getMaintenanceRecordId(),verifiedAfter.work().getVerifiedSubmissionId());assertEquals(verifiedBefore.getVerifiedAt(),verifiedAfter.work().getVerifiedAt());
+        assertNull(verifiedAfter.submissions().getFirst().reviewerId());assertEquals("Verified",verifiedAfter.submissions().getFirst().disposition());
+        assertEquals("Historical verified action",verifiedAfter.actionTaken());
+    }
+
+    @Test
+    void correctionMigrationFreshIsolatedSetup() throws Exception {
+        try(var c=operator();var st=c.createStatement()) {
+            assertTrue(c.getMetaData().getURL().matches("jdbc:mysql://(?:127\\.0\\.0\\.1|localhost):[0-9]+/aceos_next_test(?:\\?.*)?"));
+            st.execute("SET FOREIGN_KEY_CHECKS=0");
+            try {
+                for(String table:List.of("repair_reviews","complaint_notes","action_audit","asset_safety_holds","asset_lifecycle_history","maintenance_records","work_orders","complaints","asset_inspections","preventive_maintenance_schedules","user_accounts","operator_setup","security_gate","assets","users","schema_migrations"))
+                    st.execute("DROP TABLE "+table);
+            } finally {st.execute("SET FOREIGN_KEY_CHECKS=1");}
+            String baseline=new String(getClass().getResourceAsStream("/database/V000__baseline.sql").readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);
+            for(String sql:baseline.split(";"))if(!sql.isBlank())st.execute(sql);
+            Migrations.migrate(c);Migrations.migrate(c);Migrations.assertCompatible(c);
+            try(var r=st.executeQuery("SELECT COUNT(*) FROM schema_migrations WHERE status='COMPLETE'")){r.next();assertEquals(5,r.getInt(1));}
+            try(var r=st.executeQuery("SELECT COUNT(*) FROM repair_reviews")){r.next();assertEquals(0,r.getInt(1));}
+            try(var r=st.executeQuery("SELECT COUNT(*) FROM maintenance_records")){r.next();assertEquals(0,r.getInt(1));}
+        }
     }
 
     @Test

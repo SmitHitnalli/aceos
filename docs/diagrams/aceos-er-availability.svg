@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="520" height="680" preserveAspectRatio="xMinYMin meet" viewBox="0 0 520 680" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>...</title>
+	<desc>...</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="520" height="680"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-680)" style="clip-path: url(#clip)">
+		<g transform="">
+			<text x="10" y="660" style="font-family: ArialBold; font-size: 13px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,1320) scale(1,-1)">Availability inspections and preventive schedules</text>
+			<polyline points="205 550, 110 510, 110 480" style="stroke: rgb(38%,45%,54%); stroke-linecap: butt; stroke-width: 1.1; fill: None; fill-rule: evenodd;"/>
+			<text x="15" y="510" style="font-family: Arial; font-size: 8px;fill: rgb(14%,23%,31%); stroke:none;" transform="translate(0,1020) scale(1,-1)">asset 1 to 0..N</text>
+			<polyline points="315 550, 410 510, 410 480" style="stroke: rgb(38%,45%,54%); stroke-linecap: butt; stroke-width: 1.1; fill: None; fill-rule: evenodd;"/>
+			<text x="363" y="510" style="font-family: Arial; font-size: 8px;fill: rgb(14%,23%,31%); stroke:none;" transform="translate(0,1020) scale(1,-1)">asset 1 to 0..N</text>
+			<polyline points="110 395, 110 305" style="stroke: rgb(38%,45%,54%); stroke-linecap: butt; stroke-width: 1.1; fill: None; fill-rule: evenodd;"/>
+			<text x="18" y="347" style="font-family: Arial; font-size: 8px;fill: rgb(14%,23%,31%); stroke:none;" transform="translate(0,694) scale(1,-1)">failure 1 to 0..1 hold</text>
+			<polyline points="355 590, 505 590, 505 263" style="stroke: rgb(38%,45%,54%); stroke-linecap: butt; stroke-width: 1.1; fill: None; fill-rule: evenodd;"/>
+			<text x="392" y="340" style="font-family: Arial; font-size: 8px;fill: rgb(14%,23%,31%); stroke:none;" transform="translate(0,680) scale(1,-1)">asset 1 to 0..N</text>
+			<polyline points="110 220, 110 155" style="stroke: rgb(38%,45%,54%); stroke-linecap: butt; stroke-width: 1.1; fill: None; fill-rule: evenodd;"/>
+			<text x="18" y="180" style="font-family: Arial; font-size: 8px;fill: rgb(14%,23%,31%); stroke:none;" transform="translate(0,360) scale(1,-1)">optional repair evidence</text>
+			<rect x="165" y="550" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="165" y="612" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="173" y="620" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,1240) scale(1,-1)">assets</text>
+			<text x="173" y="598" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,1196) scale(1,-1)">PK asset_id</text>
+			<text x="173" y="585" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,1170) scale(1,-1)">Manual lifecycle and availability</text>
+			<rect x="15" y="395" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="15" y="457" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="23" y="465" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,930) scale(1,-1)">asset_inspections</text>
+			<text x="23" y="443" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,886) scale(1,-1)">PK inspection_id</text>
+			<text x="23" y="430" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,860) scale(1,-1)">FK asset assignee inspector</text>
+			<text x="23" y="417" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,834) scale(1,-1)">SCHEDULED PASSED FAILED</text>
+			<rect x="315" y="395" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="315" y="457" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="323" y="465" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,930) scale(1,-1)">preventive_maintenance_schedules</text>
+			<text x="323" y="443" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,886) scale(1,-1)">PK maintenance_schedule_id</text>
+			<text x="323" y="430" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,860) scale(1,-1)">FK asset_id; positive frequency</text>
+			<text x="323" y="417" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,834) scale(1,-1)">ACTIVE PAUSED; next due date</text>
+			<rect x="15" y="220" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="15" y="282" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="23" y="290" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,580) scale(1,-1)">asset_safety_holds</text>
+			<text x="23" y="268" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,536) scale(1,-1)">PK hold_id; UQ failed_inspection_id</text>
+			<text x="23" y="255" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,510) scale(1,-1)">FK asset creators and clearers</text>
+			<text x="23" y="242" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,484) scale(1,-1)">One selected clearance evidence type</text>
+			<rect x="315" y="220" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="315" y="282" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="323" y="290" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,580) scale(1,-1)">asset_lifecycle_history</text>
+			<text x="323" y="268" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,536) scale(1,-1)">PK history_id; FK asset actor</text>
+			<text x="323" y="255" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,510) scale(1,-1)">Previous and next lifecycle</text>
+			<text x="323" y="242" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,484) scale(1,-1)">Required reason and recorded time</text>
+			<rect x="15" y="70" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="15" y="132" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="23" y="140" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,280) scale(1,-1)">work_orders</text>
+			<text x="23" y="118" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,236) scale(1,-1)">PK work_order_id</text>
+			<text x="23" y="105" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,210) scale(1,-1)">Optional verified repair evidence</text>
+			<rect x="315" y="70" width="190" height="85" style="stroke: rgb(67%,72%,76%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<rect x="315" y="132" width="190" height="23" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,96%); fill-rule: evenodd;"/>
+			<text x="323" y="140" style="font-family: ArialBold; font-size: 8.4px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,280) scale(1,-1)">users</text>
+			<text x="323" y="118" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,236) scale(1,-1)">PK user_id</text>
+			<text x="323" y="105" style="font-family: Arial; font-size: 7.7px;fill: rgb(0%,0%,0%); stroke:none;" transform="translate(0,210) scale(1,-1)">Assignees inspectors and actors</text>
+			<text x="10" y="14" style="font-family: Arial; font-size: 7.5px;fill: rgb(26%,32%,41%); stroke:none;" transform="translate(0,28) scale(1,-1)">Holds also reference the asset, creating/clearing users and optional passing inspection.</text>
+			<text x="10" y="3" style="font-family: Arial; font-size: 7.5px;fill: rgb(26%,32%,41%); stroke:none;" transform="translate(0,6) scale(1,-1)">All actor/evidence FKs are enumerated in the complete relationship map.</text>
+		</g>
+	</g>
+</svg>
