@@ -2,7 +2,7 @@
 
 AceOS (Asset, Compliance & Equipment Operations System) is a local JavaFX application for institutional assets, complaints, repairs, preventive schedules and inspections. It is an independent OOP and RDBMS college project inspired by campus operations.
 
-## Current college build
+## Current build
 
 The college feature scope is closed. Accounts and sessions, role workspaces, connected management screens, comments/review reasons, technician workload, complaint withdrawal/reopening and repair return/correction are implemented. Smit confirmed the role walkthroughs, remaining keyboard/screen-reader/reset/invalidation/feedback checks and the five-step repair-return walkthrough. Human confirmations are separate from automated verification.
 
@@ -12,7 +12,6 @@ The current release is **[v2.0.0](https://github.com/SmitHitnalli/aceos/releases
 
 - [College package](https://github.com/SmitHitnalli/aceos/releases/download/v2.0.0/AceOS-v2.0.0-college.zip): application, runtime libraries, source, report, launcher and verification evidence.
 - [Source archive](https://github.com/SmitHitnalli/aceos/releases/download/v2.0.0/AceOS-v2.0.0-source.zip): tagged source for inspection or rebuilding.
-- [Checksums](https://github.com/SmitHitnalli/aceos/releases/download/v2.0.0/SHA256SUMS.txt): SHA-256 hashes for both archives.
 
 Start with `START-HERE.md` inside the college package. Java 24 and a separately configured MySQL 8 database are required; database credentials and data are not bundled.
 
