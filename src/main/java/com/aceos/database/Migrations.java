@@ -42,7 +42,7 @@ public final class Migrations {
                         "CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY,"
                             + " checksum CHAR(64) NOT NULL, status VARCHAR(20) NOT NULL)");
                 preflight(c);
-                for (int version = 1; version <= 3; version++) apply(c, version);
+                for (int version = 1; version <= 4; version++) apply(c, version);
                 assertCompatible(c);
             } finally {
                 s.execute("SELECT RELEASE_LOCK('aceos_foundation_migration')");
@@ -72,7 +72,7 @@ public final class Migrations {
     }
 
     private static byte[] resource(int version) throws SQLException {
-        String name = switch(version) { case 1 -> "V001__accounts.sql"; case 2 -> "V002__availability.sql"; case 3 -> "V003__complaint_notes.sql"; default -> throw new SQLException("Unsupported migration version"); };
+        String name = switch(version) { case 1 -> "V001__accounts.sql"; case 2 -> "V002__availability.sql"; case 3 -> "V003__complaint_notes.sql"; case 4 -> "V004__complaint_reopening.sql"; default -> throw new SQLException("Unsupported migration version"); };
         try (var in = Migrations.class.getResourceAsStream("/database/" + name)) {
             if (in == null) throw new SQLException("Missing migration resource");
             return in.readAllBytes();
@@ -132,7 +132,7 @@ public final class Migrations {
     public static void assertCompatible(Connection c) throws SQLException {
         try (var s = c.createStatement(); var r = s.executeQuery(
                 "SELECT version,status,checksum FROM schema_migrations ORDER BY version")) {
-            for (int version = 1; version <= 3; version++) {
+            for (int version = 1; version <= 4; version++) {
                 if (!r.next() || r.getInt(1) != version || !"COMPLETE".equals(r.getString(2))
                         || !checksum(resource(version)).equals(r.getString(3)))
                     throw new SQLException("Run reviewed migrations; incompatible version/checksum");
@@ -146,6 +146,15 @@ public final class Migrations {
             s.executeQuery("SELECT clearance_reason FROM asset_safety_holds LIMIT 0").close();
             s.executeQuery("SELECT reason FROM asset_lifecycle_history LIMIT 0").close();
             s.executeQuery("SELECT note_id,body,author_role,kind,recorded_at FROM complaint_notes LIMIT 0").close();
+        }
+        try(var p=c.prepareStatement("SELECT CONSTRAINT_NAME,CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND CONSTRAINT_NAME IN ('chk_complaints_status','chk_note_kind')");var r=p.executeQuery()) {
+            boolean status=false,notes=false;
+            while(r.next()) {
+                String clause=r.getString(2).replace("\\", "");
+                if(r.getString(1).equals("chk_complaints_status"))status=clause.contains("'WITHDRAWN'");
+                else notes=clause.contains("'WITHDRAW_REASON'") && clause.contains("'REOPEN_REASON'");
+            }
+            if(!status || !notes)throw new SQLException("Incompatible withdrawal/reopening constraints; run reviewed migrations");
         }
     }
     /** Git checkouts may use CRLF on Windows; line endings must not change migration identity. */

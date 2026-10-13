@@ -153,6 +153,90 @@ class FoundationTest {
         return admin.getTechnicianWorkloads().stream().filter(w -> w.technician().getUserId()==id).findFirst().orElseThrow();
     }
 
+    @Test
+    void withdrawalReopeningOwnershipHistoryCountsAndRestrictions() throws Exception {
+        Asset a=asset("REOPEN");var c=complaint(requester,a);var original=c.getReportedAt();
+        requester.addComplaintComment(c.getComplaintId(),"Original comment");
+        for(var who:List.of(admin,otherRequester,technician,new AceOsService()))denied(() -> who.withdrawComplaint(c.getComplaintId(),"Withdraw"));
+        denied(() -> requester.withdrawComplaint(c.getComplaintId()," "));denied(() -> requester.withdrawComplaint(c.getComplaintId(),"x".repeat(2001)));
+        requester.withdrawComplaint(c.getComplaintId(),"No longer needed");
+        assertEquals(ComplaintStatus.WITHDRAWN,requester.getComplaint(c.getComplaintId()).getStatus());
+        assertEquals(0,requester.getDashboardSummary().counts().get("open"));
+        assertEquals(0,admin.getDashboardSummary().counts().get("review"));
+        denied(() -> requester.addComplaintComment(c.getComplaintId(),"Closed"));denied(() -> admin.acceptComplaint(c.getComplaintId(),"Stale"));
+        denied(() -> otherRequester.reopenComplaint(c.getComplaintId(),"Foreign"));denied(() -> technician.reopenComplaint(c.getComplaintId(),"Denied"));
+        requester.reopenComplaint(c.getComplaintId(),"Still broken");
+        assertEquals(1,requester.getDashboardSummary().counts().get("open"));assertEquals(1,admin.getDashboardSummary().counts().get("review"));
+        admin.rejectComplaint(c.getComplaintId(),"Need evidence");denied(() -> requester.reopenComplaint(c.getComplaintId(),"Bypass review"));
+        admin.reopenComplaint(c.getComplaintId(),"New evidence received");
+        requester.withdrawComplaint(c.getComplaintId(),"Requester withdrawal again");admin.reopenComplaint(c.getComplaintId(),"Requester asked to restore");
+        var d=requester.getRepairDetail(c.getComplaintId());assertEquals(original,d.complaint().getReportedAt());
+        assertEquals(c.getDescription(),d.complaint().getDescription());assertEquals(c.getPriority(),d.complaint().getPriority());
+        assertEquals(List.of(ComplaintNote.Kind.COMMENT,ComplaintNote.Kind.WITHDRAW_REASON,ComplaintNote.Kind.REOPEN_REASON,ComplaintNote.Kind.REJECT_REASON,ComplaintNote.Kind.REOPEN_REASON,ComplaintNote.Kind.WITHDRAW_REASON,ComplaintNote.Kind.REOPEN_REASON),d.notes().stream().map(ComplaintNote::kind).toList());
+        assertEquals(3,d.timeline().stream().filter(e -> e.description().contains("reopened")).count());
+        assertEquals(AssetStatus.ACTIVE,admin.getAsset(a.getAssetId()).getStatus());
+        admin.acceptComplaint(c.getComplaintId(),"Approve after reopening");denied(() -> requester.withdrawComplaint(c.getComplaintId(),"Too late"));
+        var w=admin.assignWorkOrder(c.getComplaintId(),5);denied(() -> admin.reopenComplaint(c.getComplaintId(),"Linked repair"));
+        technician.startWorkOrder(w.getWorkOrderId());technician.completeWorkOrder(w.getWorkOrderId(),"Fixed");admin.verifyWorkOrder(w.getWorkOrderId());
+        denied(() -> admin.reopenComplaint(c.getComplaintId(),"Resolved"));assertEquals(1,requester.getAssetHistory(a.getAssetId()).size());
+        Asset retired=asset("REOPEN-RETIRED");var rc=complaint(requester,retired);admin.changeAssetLifecycle(retired.getAssetId(),ManualLifecycle.ACTIVE,ManualLifecycle.RETIRED,"Retire");
+        requester.withdrawComplaint(rc.getComplaintId(),"Withdraw retired request");denied(() -> requester.reopenComplaint(rc.getComplaintId(),"Retired"));denied(() -> admin.reopenComplaint(rc.getComplaintId(),"Retired"));
+        var fresh=complaint(requester,a);admin.issueCredential(3);denied(() -> requester.withdrawComplaint(fresh.getComplaintId(),"Stale session"));
+    }
+
+    @Test
+    void withdrawalReopeningAtomicRacesAndLinkedRepairGuard() throws Exception {
+        var c=complaint(requester,asset("WITHDRAW-ATOMIC"));
+        try(var connection=operator();var s=connection.createStatement()){s.execute("ALTER TABLE complaint_notes ADD CONSTRAINT withdrawal_test_failure CHECK (kind<>'WITHDRAW_REASON')");}
+        try{denied(() -> requester.withdrawComplaint(c.getComplaintId(),"Must roll back"));}
+        finally{try(var connection=operator();var s=connection.createStatement()){s.execute("ALTER TABLE complaint_notes DROP CHECK withdrawal_test_failure");}}
+        assertEquals(ComplaintStatus.SUBMITTED,requester.getComplaint(c.getComplaintId()).getStatus());assertTrue(requester.getRepairDetail(c.getComplaintId()).notes().isEmpty());
+        var start=new CountDownLatch(1);var pool=Executors.newFixedThreadPool(2);
+        try {
+            var one=pool.submit(() -> {start.await();try{requester.withdrawComplaint(c.getComplaintId(),"Withdraw");return true;}catch(AceOsServiceException e){return false;}});
+            var two=pool.submit(() -> {start.await();try{admin.acceptComplaint(c.getComplaintId(),"Accept");return true;}catch(AceOsServiceException e){return false;}});
+            start.countDown();assertNotEquals(one.get(10,TimeUnit.SECONDS),two.get(10,TimeUnit.SECONDS));
+        }finally{pool.shutdownNow();}
+        assertEquals(1,requester.getRepairDetail(c.getComplaintId()).notes().size());
+        var linked=assigned(c.getAsset());
+        try(var connection=operator();var p=connection.prepareStatement("UPDATE complaints SET status='REJECTED' WHERE complaint_id=?")){p.setInt(1,linked.getComplaint().getComplaintId());p.executeUpdate();}
+        denied(() -> admin.reopenComplaint(linked.getComplaint().getComplaintId(),"Existing linked record"));
+        assertEquals(ComplaintStatus.REJECTED,admin.getComplaint(linked.getComplaint().getComplaintId()).getStatus());
+        try(var connection=operator();var p=connection.prepareStatement("UPDATE complaints SET status='WORK_ORDER_CREATED' WHERE complaint_id=?")){p.setInt(1,linked.getComplaint().getComplaintId());p.executeUpdate();}
+        var unicode=complaint(requester,c.getAsset());requester.withdrawComplaint(unicode.getComplaintId(),"\uD83D\uDE00".repeat(2000));
+        denied(() -> requester.reopenComplaint(unicode.getComplaintId(),"x".repeat(2001)));
+        try(var connection=operator();var s=connection.createStatement()){s.execute("ALTER TABLE complaint_notes ADD CONSTRAINT reopening_test_failure CHECK (kind<>'REOPEN_REASON')");}
+        try{denied(() -> requester.reopenComplaint(unicode.getComplaintId(),"Must roll back reopening"));}
+        finally{try(var connection=operator();var s=connection.createStatement()){s.execute("ALTER TABLE complaint_notes DROP CHECK reopening_test_failure");}}
+        assertEquals(ComplaintStatus.WITHDRAWN,requester.getComplaint(unicode.getComplaintId()).getStatus());assertEquals(1,requester.getRepairDetail(unicode.getComplaintId()).notes().size());
+        var restart=new CountDownLatch(1);var reopens=Executors.newFixedThreadPool(2);
+        try{
+            var one=reopens.submit(() -> {restart.await();try{requester.reopenComplaint(unicode.getComplaintId(),"Requester reopening");return true;}catch(AceOsServiceException e){return false;}});
+            var two=reopens.submit(() -> {restart.await();try{admin.reopenComplaint(unicode.getComplaintId(),"Administrator reopening");return true;}catch(AceOsServiceException e){return false;}});
+            restart.countDown();assertNotEquals(one.get(10,TimeUnit.SECONDS),two.get(10,TimeUnit.SECONDS));
+        }finally{reopens.shutdownNow();}
+        assertEquals(2,requester.getRepairDetail(unicode.getComplaintId()).notes().size());assertEquals(ComplaintStatus.SUBMITTED,requester.getComplaint(unicode.getComplaintId()).getStatus());
+    }
+
+    @Test
+    void reopeningMigrationPreservesOldDataAndStopsPartialOrMismatch() throws Exception {
+        var c=complaint(requester,asset("REOPEN-MIGRATION"));admin.rejectComplaint(c.getComplaintId(),"Preserve this reason");
+        var before=requester.getRepairDetail(c.getComplaintId());
+        try(var connection=operator();var s=connection.createStatement()) {
+            s.execute("ALTER TABLE complaints DROP CHECK chk_complaints_status, ADD CONSTRAINT chk_complaints_status CHECK (status IN ('SUBMITTED','ACCEPTED','REJECTED','WORK_ORDER_CREATED','RESOLVED'))");
+            s.execute("ALTER TABLE complaint_notes DROP CHECK chk_note_kind, ADD CONSTRAINT chk_note_kind CHECK (kind IN ('COMMENT','ACCEPT_REASON','REJECT_REASON'))");
+            assertThrows(SQLException.class,() -> Migrations.assertCompatible(connection));s.executeUpdate("DELETE FROM schema_migrations WHERE version=4");
+            Migrations.migrate(connection);Migrations.migrate(connection);
+            s.executeUpdate("UPDATE schema_migrations SET status='STARTED' WHERE version=4");
+            try{assertThrows(SQLException.class,() -> Migrations.migrate(connection));}finally{s.executeUpdate("UPDATE schema_migrations SET status='COMPLETE' WHERE version=4");}
+            s.executeUpdate("UPDATE schema_migrations SET checksum=REPEAT('0',64) WHERE version=4");
+            try{assertThrows(SQLException.class,() -> Migrations.assertCompatible(connection));}
+            finally{s.executeUpdate("UPDATE schema_migrations SET checksum='"+Migrations.checksum(FoundationTest.class.getResourceAsStream("/database/V004__complaint_reopening.sql").readAllBytes())+"' WHERE version=4");}
+        }
+        var after=requester.getRepairDetail(c.getComplaintId());assertEquals(before.notes(),after.notes());assertEquals(before.complaint().getReportedAt(),after.complaint().getReportedAt());assertEquals(ComplaintStatus.REJECTED,after.complaint().getStatus());
+        admin.reopenComplaint(c.getComplaintId(),"Reopen after migration");assertEquals(2,requester.getRepairDetail(c.getComplaintId()).notes().size());
+    }
+
     void assertWorkload(int id,int waiting,int started,int verification,int scheduled,int overdue) throws Exception {
         var w=workload(id);
         assertEquals(List.of(waiting,started,verification,scheduled,overdue),

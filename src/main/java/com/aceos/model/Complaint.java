@@ -105,6 +105,28 @@ public class Complaint {
         status = ComplaintStatus.WORK_ORDER_CREATED;
     }
 
+    public void withdraw(User requester) {
+        requireOwner(requester);
+        requireStatus(ComplaintStatus.SUBMITTED, "Only a submitted complaint can be withdrawn");
+        status = ComplaintStatus.WITHDRAWN;
+    }
+
+    public void reopen(User actor) {
+        if (status != ComplaintStatus.WITHDRAWN && status != ComplaintStatus.REJECTED)
+            throw new IllegalStateException("Only withdrawn or rejected complaints can be reopened");
+        if (actor.getRole() != UserRole.ADMINISTRATOR) {
+            requireOwner(actor);
+            requireStatus(ComplaintStatus.WITHDRAWN, "Only administrators can reopen rejected complaints");
+        }
+        status = ComplaintStatus.SUBMITTED;
+    }
+
+    private void requireOwner(User actor) {
+        Objects.requireNonNull(actor, "Requester is required");
+        if (actor.getRole() != UserRole.REQUESTER || actor.getUserId() != reportedBy.getUserId())
+            throw new IllegalArgumentException("Only the complaint's requester can perform this action");
+    }
+
     void resolve() {
         requireStatus(
                 ComplaintStatus.WORK_ORDER_CREATED,

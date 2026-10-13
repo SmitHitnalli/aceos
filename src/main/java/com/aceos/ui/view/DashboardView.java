@@ -191,6 +191,7 @@ public class DashboardView extends ScrollPane {
             case "WORK_ORDER_CREATED" -> "Repair assigned · open progress for details";
             case "RESOLVED" -> "Repair verified · complaint resolved";
             case "REJECTED" -> "Complaint rejected";
+            case "WITHDRAWN" -> "Complaint withdrawn · history preserved";
             case "COMPLETED" -> "Repair completed · awaiting administrator verification";
             default -> status.replace('_', ' ').toLowerCase();
         };

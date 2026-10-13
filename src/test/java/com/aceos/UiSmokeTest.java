@@ -1549,6 +1549,72 @@ class UiSmokeTest {
         }
     }
 
+    private static class LifecyclePreview extends NotesPreview {
+        volatile boolean failAfterWrite;
+        LifecyclePreview(com.aceos.model.UserRole role) { super(role); }
+        void status(com.aceos.model.ComplaintStatus status) {
+            var c=fixture.complaint;
+            fixture.complaint=new com.aceos.model.Complaint(c.getComplaintId(),c.getAsset(),c.getReportedBy(),c.getDescription(),c.getPriority(),status,c.getReportedAt());
+        }
+        @Override public com.aceos.model.Complaint withdrawComplaint(int id,String reason) throws com.aceos.service.AceOsServiceException {
+            assertEquals(42,id);append(reason,com.aceos.model.ComplaintNote.Kind.WITHDRAW_REASON);fixture.complaint.withdraw(signedInUser());failRead=failAfterWrite;return fixture.complaint;
+        }
+        @Override public com.aceos.model.Complaint reopenComplaint(int id,String reason) throws com.aceos.service.AceOsServiceException {
+            assertEquals(42,id);append(reason,com.aceos.model.ComplaintNote.Kind.REOPEN_REASON);fixture.complaint.reopen(signedInUser());failRead=failAfterWrite;return fixture.complaint;
+        }
+    }
+
+    @Test
+    void withdrawalReopeningRoleLayoutsRequiredReasonsAndClosedDrafts() throws Exception {
+        for(var role:com.aceos.model.UserRole.values())for(int[] size:new int[][]{{800,520},{1280,800}}) {
+            var service=new LifecyclePreview(role);var ref=new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+            fx(() -> {var v=new com.aceos.ui.WorkspaceView(service,() -> {},() -> {});ref.set(v);new Scene(v,size[0],size[1]);v.navigate("complaints");return null;});awaitControl(ref.get(),"repair-refresh");
+            fx(() -> {((javafx.scene.control.TableView<?>)ref.get().lookup("#repair-table")).getSelectionModel().selectFirst();fire(ref.get(),"repair-open");return null;});awaitControl(ref.get(),"repair-refresh");
+            fx(() -> {
+                assertEquals(role==com.aceos.model.UserRole.REQUESTER,ref.get().lookup("#repair-withdraw")!=null);assertNull(ref.get().lookup("#repair-reopen"));
+                if(role==com.aceos.model.UserRole.REQUESTER) {
+                    fire(ref.get(),"repair-withdraw");assertEquals(0,service.writes.get());
+                    ((javafx.scene.control.TextArea)ref.get().lookup("#repair-lifecycle-reason")).setText("Withdrawal walkthrough");
+                    ((javafx.scene.control.TextArea)ref.get().lookup("#repair-comment")).setText("Keep unrelated comment draft");
+                    ((javafx.scene.control.ScrollPane)ref.get().lookup("#repair-flow")).setVvalue(1);ref.get().layout();snapshot(ref.get(),size,"withdrawal-shell-"+role+"-bottom",true);
+                    fire(ref.get(),"repair-withdraw");
+                }return null;
+            });awaitControl(ref.get(),"repair-refresh");
+            if(role==com.aceos.model.UserRole.REQUESTER) {
+                fx(() -> {assertNull(ref.get().lookup("#repair-comment-save"));assertNotNull(ref.get().lookup("#repair-reopen"));assertEquals("Keep unrelated comment draft",((javafx.scene.control.TextArea)ref.get().lookup("#repair-comment")).getText());assertFalse(((javafx.scene.control.TextArea)ref.get().lookup("#repair-comment")).isEditable());assertEquals("",((javafx.scene.control.TextArea)ref.get().lookup("#repair-lifecycle-reason")).getText());return null;});
+            }
+            service.status(com.aceos.model.ComplaintStatus.REJECTED);
+            fx(() -> {fire(ref.get(),"repair-refresh");return null;});awaitControl(ref.get(),"repair-refresh");
+            fx(() -> {assertEquals(role==com.aceos.model.UserRole.ADMINISTRATOR,ref.get().lookup("#repair-reopen")!=null);assertNull(ref.get().lookup("#repair-withdraw"));if(role==com.aceos.model.UserRole.ADMINISTRATOR){((javafx.scene.control.TextArea)ref.get().lookup("#repair-lifecycle-reason")).setText("New evidence");((javafx.scene.control.ScrollPane)ref.get().lookup("#repair-flow")).setVvalue(1);ref.get().layout();snapshot(ref.get(),size,"reopening-shell-admin-bottom",true);fire(ref.get(),"repair-reopen");}return null;});awaitControl(ref.get(),"repair-refresh");
+            if(role==com.aceos.model.UserRole.ADMINISTRATOR)fx(() -> {assertNotNull(ref.get().lookup("#repair-accept"));assertNull(ref.get().lookup("#repair-reopen"));assertTrue(service.notes.stream().anyMatch(n -> n.kind()==com.aceos.model.ComplaintNote.Kind.REOPEN_REASON));return null;});
+        }
+    }
+
+    @Test
+    void withdrawalReopeningFailureDraftDuplicatesDepartureAndStaleActions() throws Exception {
+        for(boolean reopen:new boolean[]{false,true}) {
+            var service=new LifecyclePreview(reopen?com.aceos.model.UserRole.ADMINISTRATOR:com.aceos.model.UserRole.REQUESTER);if(reopen)service.status(com.aceos.model.ComplaintStatus.REJECTED);
+            var ref=new java.util.concurrent.atomic.AtomicReference<RepairFlowView>();String action=reopen?"repair-reopen":"repair-withdraw";
+            fx(() -> {var v=new RepairFlowView(service,false,null,42);ref.set(v);new Scene(v,800,520);return null;});awaitControl(ref.get(),"repair-refresh");
+            fx(() -> {((javafx.scene.control.TextArea)ref.get().lookup("#repair-lifecycle-reason")).setText("Retain my lifecycle reason");answerDeparture(false);fire(ref.get(),"repair-back");assertNotNull(ref.get().lookup("#"+action));service.failWrite=true;service.gate=new CountDownLatch(1);fire(ref.get(),action);fire(ref.get(),action);return null;});
+            awaitFx(() -> service.writes.get()==1,true);fx(() -> {answerDeparture(false);assertFalse(com.aceos.ui.NavigationGuard.allowLeave(ref.get()));return null;});service.gate.countDown();awaitControl(ref.get(),"repair-refresh");
+            fx(() -> {assertEquals("Retain my lifecycle reason",((javafx.scene.control.TextArea)ref.get().lookup("#repair-lifecycle-reason")).getText());assertTrue(ref.get().lookup("#"+action).isDisabled());service.failWrite=false;service.gate=null;service.status(com.aceos.model.ComplaintStatus.RESOLVED);fire(ref.get(),"repair-refresh");return null;});awaitControl(ref.get(),"repair-refresh");
+            fx(() -> {assertNull(ref.get().lookup("#"+action));assertFalse(((javafx.scene.control.TextArea)ref.get().lookup("#repair-lifecycle-reason")).isEditable());assertEquals("Retain my lifecycle reason",((javafx.scene.control.TextArea)ref.get().lookup("#repair-lifecycle-reason")).getText());return null;});
+        }
+    }
+
+    @Test
+    void withdrawalReopeningSavedReadRecoveryPreservesIndependentDrafts() throws Exception {
+        for(boolean reopen:new boolean[]{false,true}) {
+            var service=new LifecyclePreview(reopen?com.aceos.model.UserRole.ADMINISTRATOR:com.aceos.model.UserRole.REQUESTER);if(reopen)service.status(com.aceos.model.ComplaintStatus.REJECTED);
+            var ref=new java.util.concurrent.atomic.AtomicReference<RepairFlowView>();String action=reopen?"repair-reopen":"repair-withdraw";
+            fx(() -> {var v=new RepairFlowView(service,false,null,42);ref.set(v);new Scene(v,800,520);return null;});awaitControl(ref.get(),"repair-refresh");
+            fx(() -> {((javafx.scene.control.TextArea)ref.get().lookup("#repair-lifecycle-reason")).setText("Save this reason");if(!reopen)((javafx.scene.control.TextArea)ref.get().lookup("#repair-comment")).setText("Unrelated comment draft");service.failAfterWrite=true;fire(ref.get(),action);return null;});awaitControl(ref.get(),"repair-refresh");
+            fx(() -> {assertTrue(((javafx.scene.control.Label)ref.get().lookup("#repair-feedback")).getText().contains(reopen?"Complaint reopened for review; reason saved.":"Complaint withdrawn; reason saved."));assertNull(ref.get().lookup("#"+action));service.failRead=false;fire(ref.get(),"repair-refresh");return null;});awaitControl(ref.get(),"repair-refresh");
+            fx(() -> {assertEquals(1,service.writes.get());assertEquals(1,service.notes.size());if(!reopen)assertEquals("Unrelated comment draft",((javafx.scene.control.TextArea)ref.get().lookup("#repair-comment")).getText());return null;});
+        }
+    }
+
     private void snapshot(Region root, int[] size, String name) throws Exception {
         snapshot(root, size, name, false);
     }

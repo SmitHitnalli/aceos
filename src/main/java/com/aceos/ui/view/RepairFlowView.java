@@ -23,6 +23,7 @@ public final class RepairFlowView extends ScrollPane {
     private final AceOsService service;
     private final boolean jobs;
     private final UserRole role;
+    private final int actorId;
     private final VBox content = new VBox(16);
     private final VBox list = new VBox(12);
     private final VBox detail = new VBox(12);
@@ -36,7 +37,7 @@ public final class RepairFlowView extends ScrollPane {
     private final javafx.collections.ObservableList<Row> rows = FXCollections.observableArrayList();
     private final TextField search = new TextField();
     private final ComboBox<String> status = new ComboBox<>();
-    private final TextArea completion = new TextArea(), reviewReason = new TextArea(), comment = new TextArea();
+    private final TextArea completion = new TextArea(), reviewReason = new TextArea(), comment = new TextArea(), lifecycleReason = new TextArea();
     private final TechnicianSelector technicians = new TechnicianSelector("repair-technician");
     private Integer selectedId;
     private boolean busy, saving;
@@ -48,11 +49,12 @@ public final class RepairFlowView extends ScrollPane {
 
     public RepairFlowView(AceOsService service, boolean jobs, String filter, Integer recordId) {
         this.service = service; this.jobs = jobs;
-        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !completion.getText().isEmpty() || !reviewReason.getText().isEmpty() || !comment.getText().isEmpty() || technicians.selected() != null);
+        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !completion.getText().isEmpty() || !reviewReason.getText().isEmpty() || !comment.getText().isEmpty() || !lifecycleReason.getText().isEmpty() || technicians.selected() != null);
         UserRole current;
-        try { current = service.signedInUser().getRole(); }
+        int currentId=0;
+        try { var actor=service.signedInUser();current=actor.getRole();currentId=actor.getUserId(); }
         catch (AceOsServiceException e) { current = null; }
-        role = current;
+        role = current;actorId=currentId;
         setId("repair-flow"); setFitToWidth(true); setHbarPolicy(ScrollBarPolicy.NEVER);
         content.setPadding(new Insets(24)); content.setMinWidth(0);
         heading.setText(jobs ? (role == UserRole.TECHNICIAN ? "Assigned repairs" : "Repair progress") : "Complaints");
@@ -60,7 +62,7 @@ public final class RepairFlowView extends ScrollPane {
         refresh.setId("repair-refresh"); refresh.setOnAction(e -> { if (selectedId == null) loadList(); else loadDetail(); });
         back.setId("repair-back"); back.setOnAction(e -> {
             if (!com.aceos.ui.NavigationGuard.allowLeave(this)) return;
-            savedFeedback = null; selectedId = null; completion.clear(); reviewReason.clear(); comment.clear(); technicians.clear(); showList(); loadList();
+            savedFeedback = null; selectedId = null; completion.clear(); reviewReason.clear(); comment.clear(); lifecycleReason.clear(); technicians.clear(); showList(); loadList();
         });
         feedback.setId("repair-feedback"); feedback.setWrapText(true);
         var header = new FlowPane(12, 8, heading, refresh, back);
@@ -101,8 +103,9 @@ public final class RepairFlowView extends ScrollPane {
         list.getChildren().addAll(searchLabel, search, new FlowPane(8, 8, statusLabel, status), table, open);
         completion.setId("repair-completion"); completion.setPromptText("Describe the work performed");
         completion.setWrapText(true); completion.setPrefRowCount(3);
-        for (var field : new TextArea[]{reviewReason,comment}) { field.setWrapText(true); field.setPrefRowCount(3); field.setPromptText("Up to 2000 characters; visible to authorized complaint participants"); }
+        for (var field : new TextArea[]{reviewReason,comment,lifecycleReason}) { field.setWrapText(true); field.setPrefRowCount(3); field.setPromptText("Up to 2000 characters; visible to authorized complaint participants"); }
         reviewReason.setId("repair-review-reason"); comment.setId("repair-comment");
+        lifecycleReason.setId("repair-lifecycle-reason");
         detail.setId("repair-detail"); detail.getStyleClass().add("dashboard-card");
         setContent(content);
         if (recordId == null) { showList(); loadList(); }
@@ -133,7 +136,7 @@ public final class RepairFlowView extends ScrollPane {
     private void openSelected() {
         if (busy || table.getSelectionModel().getSelectedItem() == null) return;
         selectedId = table.getSelectionModel().getSelectedItem().id();
-        completion.clear(); reviewReason.clear(); comment.clear(); technicians.clear(); showDetail(); loadDetail();
+        completion.clear(); reviewReason.clear(); comment.clear(); lifecycleReason.clear(); technicians.clear(); showDetail(); loadDetail();
     }
 
     private void loadList() {
@@ -223,15 +226,36 @@ public final class RepairFlowView extends ScrollPane {
         }
         if (role == UserRole.ADMINISTRATOR && w != null && w.getStatus() == WorkOrderStatus.COMPLETED)
             actions.getChildren().add(action("Verify completed repair", "repair-verify", () -> service.verifyWorkOrder(w.getWorkOrderId())));
+        boolean owner=role==UserRole.REQUESTER && actorId==c.getReportedBy().getUserId();
+        boolean withdraw=owner && c.getStatus()==ComplaintStatus.SUBMITTED && w==null;
+        boolean reopen=w==null && c.getAsset().getManualLifecycle()!=ManualLifecycle.RETIRED
+                && (c.getStatus()==ComplaintStatus.WITHDRAWN && (owner || role==UserRole.ADMINISTRATOR)
+                || c.getStatus()==ComplaintStatus.REJECTED && role==UserRole.ADMINISTRATOR);
+        lifecycleReason.setEditable(withdraw || reopen);
+        if(withdraw || reopen || !lifecycleReason.getText().isEmpty()) {
+            String label=withdraw?"Withdrawal reason (required)":reopen?"Reopening reason (required)":"Retained withdrawal/reopening draft (copy before leaving)";
+            Label reasonLabel=new Label(label);reasonLabel.setLabelFor(lifecycleReason);
+            actions.getChildren().addAll(reasonLabel,lifecycleReason);
+            if(withdraw || reopen) {
+                Button change=new Button(withdraw?"Withdraw complaint":"Reopen for review");
+                change.setId(withdraw?"repair-withdraw":"repair-reopen");change.getStyleClass().add("primary");
+                change.setOnAction(e -> {
+                    String reason=lifecycleReason.getText();if(!validNote(reason,withdraw?"Withdrawal reason":"Reopening reason"))return;
+                    mutate(() -> withdraw?service.withdrawComplaint(c.getComplaintId(),reason):service.reopenComplaint(c.getComplaintId(),reason),
+                            lifecycleReason::clear,withdraw?"Complaint withdrawn; reason saved.":"Complaint reopened for review; reason saved.");
+                });
+                actions.getChildren().addAll(text(withdraw?"Withdrawal is available only before review. History is preserved.":"Reopening returns this complaint to administrator review; it does not accept or assign a repair.","muted"),change);
+            }
+        }
         detail.getChildren().add(text("Comments and review reasons", "section-title"));
         if (data.notes().isEmpty()) detail.getChildren().add(text("No comments or recorded review reasons.", "muted"));
-        boolean hasReason = data.notes().stream().anyMatch(n -> n.kind()!=ComplaintNote.Kind.COMMENT);
-        if (c.getStatus()!=ComplaintStatus.SUBMITTED && !hasReason)
+        boolean hasReason = data.notes().stream().anyMatch(n -> n.kind()==ComplaintNote.Kind.ACCEPT_REASON || n.kind()==ComplaintNote.Kind.REJECT_REASON);
+        if (c.getStatus()!=ComplaintStatus.SUBMITTED && c.getStatus()!=ComplaintStatus.WITHDRAWN && !hasReason)
             detail.getChildren().add(text("Review reason was not recorded for this historical complaint.", "muted"));
         for (var note : data.notes()) detail.getChildren().addAll(
                 text(note.kind().name().replace('_',' ') + " · " + note.authorName() + " · " + note.authorRole() + " · "
                         + note.at().format(DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss")),"muted"), text(note.body(),""));
-        boolean closed = c.getStatus()==ComplaintStatus.REJECTED || c.getStatus()==ComplaintStatus.RESOLVED;
+        boolean closed = c.getStatus().isClosed();
         comment.setEditable(!closed);
         if (!closed || !comment.getText().isEmpty()) {
             Label commentLabel = new Label(closed ? "Retained draft (closed complaint; copy before leaving)" : "Add comment"); commentLabel.setLabelFor(comment);
@@ -313,6 +337,7 @@ public final class RepairFlowView extends ScrollPane {
             case "WORK_ORDER_CREATED" -> "Repair assigned";
             case "COMPLETED" -> "Completed · awaiting verification";
             case "RESOLVED" -> "Resolved · repair verified";
+            case "WITHDRAWN" -> "Withdrawn · history preserved";
             default -> status.replace('_', ' ').toLowerCase(Locale.ROOT);
         };
     }

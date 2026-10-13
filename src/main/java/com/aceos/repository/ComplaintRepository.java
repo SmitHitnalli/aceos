@@ -98,6 +98,17 @@ public class ComplaintRepository {
         }
     }
 
+    public void updateWithdrawalOrReopening(int id, ComplaintStatus previous, ComplaintStatus next) throws SQLException {
+        String sql = Scope.filter("""
+                UPDATE complaints c SET c.status=? WHERE c.complaint_id=? AND c.status=?
+                AND NOT EXISTS (SELECT 1 FROM work_orders w WHERE w.complaint_id=c.complaint_id)
+                """, "complaints", "c");
+        try (var connection=DatabaseConnection.getConnection(); var p=connection.prepareStatement(sql)) {
+            p.setString(1,next.name()); p.setInt(2,id); p.setString(3,previous.name());
+            if(p.executeUpdate()!=1) throw new SQLException("Complaint changed or already has a repair; refresh before retrying");
+        }
+    }
+
     public Optional<Complaint> findById(int complaintId) throws SQLException {
         String sql =
                 """

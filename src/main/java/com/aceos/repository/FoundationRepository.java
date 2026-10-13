@@ -46,7 +46,7 @@ public final class FoundationRepository {
                 (int)
                         SecurityRepository.count(
                                 "SELECT COUNT(*) FROM complaints c WHERE c.status NOT IN"
-                                        + " ('REJECTED','RESOLVED') AND "
+                                        + " ('REJECTED','RESOLVED','WITHDRAWN') AND "
                                         + (requester
                                                 ? "c.reported_by_user_id=?"
                                                 : "c.complaint_id IN (SELECT complaint_id FROM"

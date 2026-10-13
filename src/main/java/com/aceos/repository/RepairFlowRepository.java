@@ -33,16 +33,20 @@ public final class RepairFlowRepository {
         }
         var events = new ArrayList<RepairDetail.Event>();
         events.add(new RepairDetail.Event("Complaint reported", complaint.getReportedAt()));
-        // The parent complaint has already passed SQL ownership checks. Only these two
-        // complaint review events are exposed, with no actor/contact or unrelated audit data.
+        // The parent complaint has passed SQL ownership checks. Expose only complaint transitions.
         try (var p = SecurityRepository.connection().prepareStatement("""
                 SELECT action,recorded_at FROM action_audit WHERE target_id=?
-                AND action IN ('acceptComplaint','rejectComplaint') ORDER BY recorded_at,audit_id
+                AND action IN ('acceptComplaint','rejectComplaint','COMPLAINT_WITHDRAWN','COMPLAINT_REOPENED') ORDER BY recorded_at,audit_id
                 """)) {
             p.setInt(1, complaint.getComplaintId());
             try (var r = p.executeQuery()) {
                 while (r.next()) events.add(new RepairDetail.Event(
-                        r.getString(1).equals("acceptComplaint") ? "Complaint accepted" : "Complaint rejected",
+                        switch(r.getString(1)) {
+                            case "acceptComplaint" -> "Complaint accepted";
+                            case "rejectComplaint" -> "Complaint rejected";
+                            case "COMPLAINT_WITHDRAWN" -> "Complaint withdrawn";
+                            default -> "Complaint reopened · awaiting review";
+                        },
                         r.getTimestamp(2).toLocalDateTime()));
             }
         }

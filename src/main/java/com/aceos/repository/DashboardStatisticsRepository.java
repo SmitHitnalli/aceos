@@ -28,7 +28,8 @@ public class DashboardStatisticsRepository {
                         FROM complaints
                         WHERE status NOT IN (
                             'REJECTED',
-                            'RESOLVED'
+                            'RESOLVED',
+                            'WITHDRAWN'
                         )
                     ) AS open_complaints,
                     (

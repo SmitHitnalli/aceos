@@ -5,5 +5,8 @@ public enum ComplaintStatus {
     ACCEPTED,
     REJECTED,
     WORK_ORDER_CREATED,
-    RESOLVED
+    RESOLVED,
+    WITHDRAWN;
+
+    public boolean isClosed() { return this == REJECTED || this == RESOLVED || this == WITHDRAWN; }
 }

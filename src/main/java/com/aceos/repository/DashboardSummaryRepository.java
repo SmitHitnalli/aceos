@@ -16,7 +16,7 @@ public final class DashboardSummaryRepository {
         var counts = new LinkedHashMap<String, Integer>();
         var items = new ArrayList<DashboardSummary.Item>();
         if (role == UserRole.REQUESTER) {
-            count(counts, "open", "SELECT COUNT(*) FROM complaints WHERE reported_by_user_id=? AND status NOT IN ('RESOLVED','REJECTED')", actor);
+            count(counts, "open", "SELECT COUNT(*) FROM complaints WHERE reported_by_user_id=? AND status NOT IN ('RESOLVED','REJECTED','WITHDRAWN')", actor);
             count(counts, "resolved", "SELECT COUNT(*) FROM complaints WHERE reported_by_user_id=? AND status='RESOLVED'", actor);
             rows(items, "Complaint", "SELECT c.complaint_id id,a.name asset,c.status,CONCAT(c.priority,' · ',c.description,COALESCE(CONCAT(' · Repair: ',w.status),'')) detail FROM complaints c JOIN assets a ON a.asset_id=c.asset_id LEFT JOIN work_orders w ON w.complaint_id=c.complaint_id WHERE c.reported_by_user_id=? ORDER BY c.reported_at DESC,c.complaint_id DESC LIMIT 6", actor);
         } else if (role == UserRole.TECHNICIAN) {

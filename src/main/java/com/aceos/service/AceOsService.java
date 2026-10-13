@@ -445,11 +445,33 @@ public class AceOsService {
         return execute(null, "COMPLAINT_COMMENT", "The comment could not be saved", () -> {
             // SQL-scoped parent lookup revalidates own/current-assignment access in this transaction.
             Complaint complaint = requireComplaint(complaintId);
-            if (complaint.getStatus()==ComplaintStatus.REJECTED || complaint.getStatus()==ComplaintStatus.RESOLVED)
+            if (complaint.getStatus().isClosed())
                 throw new AceOsServiceException("Closed complaints are read-only");
             new com.aceos.repository.ComplaintNoteRepository().append(complaintId,Scope.user(),ComplaintNote.Kind.COMMENT,text);
             return complaint;
         });
+    }
+
+    public Complaint withdrawComplaint(int id, String reason) throws AceOsServiceException {
+        return withdrawalOrReopening(id,reason,false);
+    }
+
+    public Complaint reopenComplaint(int id, String reason) throws AceOsServiceException {
+        return withdrawalOrReopening(id,reason,true);
+    }
+
+    private Complaint withdrawalOrReopening(int id,String reason,boolean reopen) throws AceOsServiceException {
+        requireId(id,"Complaint"); String text=requireNote(reason,reopen?"Reopening reason":"Withdrawal reason");
+        return execute(reopen?null:UserRole.REQUESTER,reopen?"COMPLAINT_REOPENED":"COMPLAINT_WITHDRAWN",
+                "The complaint could not be changed", () -> {
+                    Complaint c=requireComplaint(id); ComplaintStatus previous=c.getStatus();
+                    if(reopen) { AvailabilityRepository.requireOperational(c.getAsset().getAssetId());c.reopen(Scope.user()); }
+                    else c.withdraw(Scope.user());
+                    complaintRepository.updateWithdrawalOrReopening(id,previous,c.getStatus());
+                    new com.aceos.repository.ComplaintNoteRepository().append(id,Scope.user(),
+                            reopen?ComplaintNote.Kind.REOPEN_REASON:ComplaintNote.Kind.WITHDRAW_REASON,text);
+                    return c;
+                });
     }
     private static String requireNote(String value, String field) throws AceOsServiceException {
         if(value==null || value.isBlank()) throw new AceOsServiceException(field + " is required");
