@@ -39,6 +39,10 @@ The bounded Phase 3 recovery closeout is implemented locally. Leaving unfinished
 
 ## Setup and run
 
+The first selected Phase 4 chunk, **complaint comments and review reasons**, is now implemented and locally verified. Requesters comment on their own open complaints, technicians on their assigned complaints, and administrators on any open complaint. Acceptance and rejection both require a reason. Comments/reasons are append-only, limited to 2,000 Unicode characters and visible only to existing authorized complaint participants, with author name, role at posting and time; no contact details are added. Resolved/rejected complaints remain readable but cannot receive new comments. Older reviews are preserved without invented reasons. The seven-tab administrator menu and existing repair/availability states remain unchanged.
+
+V003 adds `complaint_notes` without altering existing rows. Both isolated pre-V003 backups were restored and every table checksum matched; after migration, all 13 existing development data tables still matched their backup and V001/V002 history remained unchanged. Runtime access to the new table is SELECT/INSERT only. Eight database and eight JavaFX checks passed in the final focused runs (zero failures/errors/skips), including six new notes checks and ten affected regression checks. Role-shell layouts and action reachability were reviewed at 800×520 and 1280×800. Smit confirmed the private live comments/review-reasons walkthrough works; the earlier keyboard/screen-reader and explicit live reset/invalidation checks remain open. No withdrawal/reopening, private notes, edit/delete, new release or deployment.
+
 Follow [the F1/F2 setup, permissions and recovery guide](docs/foundation.md). Use **new isolated** `aceos_next_dev` and `aceos_next_test` schemas, separate runtime and migration/operator accounts, and private environment-provided credentials. Do not migrate/reset the existing `aceos` database in place.
 
 For a fresh empty isolated schema, execute `src/main/resources/database/V000__baseline.sql`, then configure `ACEOS_MIGRATION_URL`, `ACEOS_MIGRATION_USER`, `ACEOS_MIGRATION_PASSWORD` and run:

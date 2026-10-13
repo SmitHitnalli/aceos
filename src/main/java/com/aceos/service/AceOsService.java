@@ -8,6 +8,8 @@ import com.aceos.model.Asset;
 import com.aceos.model.AssetInspection;
 import com.aceos.model.AssetStatus;
 import com.aceos.model.Complaint;
+import com.aceos.model.ComplaintNote;
+import com.aceos.model.ComplaintStatus;
 import com.aceos.model.ComplaintPriority;
 import com.aceos.model.DashboardStatistics;
 import com.aceos.model.InspectionStatus;
@@ -407,50 +409,53 @@ public class AceOsService {
                 });
     }
 
-    public Complaint acceptComplaint(int complaintId, int administratorId)
-            throws AceOsServiceException {
+    /** Old reasonless entry points cannot bypass the current review requirement. */
+    public Complaint acceptComplaint(int complaintId, int administratorId) throws AceOsServiceException {
         requireActor(administratorId);
+        return reviewWithReason(complaintId, true, null);
+    }
+    public Complaint rejectComplaint(int complaintId, int administratorId) throws AceOsServiceException {
+        requireActor(administratorId);
+        return reviewWithReason(complaintId, false, null);
+    }
+    public Complaint acceptComplaint(int complaintId, String reason) throws AceOsServiceException {
+        return reviewWithReason(complaintId, true, reason);
+    }
+    public Complaint rejectComplaint(int complaintId, String reason) throws AceOsServiceException {
+        return reviewWithReason(complaintId, false, reason);
+    }
+    private Complaint reviewWithReason(int complaintId, boolean accept, String reason) throws AceOsServiceException {
         requireId(complaintId, "Complaint");
-        requireId(administratorId, "Administrator");
-
-        return execute(
-                UserRole.ADMINISTRATOR,
-                "acceptComplaint",
-                "The complaint could not be accepted",
-                () -> {
+        String text = requireNote(reason, "Review reason");
+        return execute(UserRole.ADMINISTRATOR, accept ? "acceptComplaint" : "rejectComplaint",
+                "The complaint could not be reviewed", () -> {
                     Complaint complaint = requireComplaint(complaintId);
                     AvailabilityRepository.requireOperational(complaint.getAsset().getAssetId());
-                    requireActor(administratorId);
-                    User administrator = Scope.user();
-
-                    complaint.accept(administrator);
+                    if (accept) complaint.accept(Scope.user()); else complaint.reject(Scope.user());
                     complaintRepository.updateReview(complaint);
-
+                    new com.aceos.repository.ComplaintNoteRepository().append(complaintId, Scope.user(),
+                            accept ? ComplaintNote.Kind.ACCEPT_REASON : ComplaintNote.Kind.REJECT_REASON, text);
                     return complaint;
                 });
     }
-
-    public Complaint rejectComplaint(int complaintId, int administratorId)
-            throws AceOsServiceException {
-        requireActor(administratorId);
+    public Complaint addComplaintComment(int complaintId, String comment) throws AceOsServiceException {
         requireId(complaintId, "Complaint");
-        requireId(administratorId, "Administrator");
-
-        return execute(
-                UserRole.ADMINISTRATOR,
-                "rejectComplaint",
-                "The complaint could not be rejected",
-                () -> {
-                    Complaint complaint = requireComplaint(complaintId);
-                    AvailabilityRepository.requireOperational(complaint.getAsset().getAssetId());
-                    requireActor(administratorId);
-                    User administrator = Scope.user();
-
-                    complaint.reject(administrator);
-                    complaintRepository.updateReview(complaint);
-
-                    return complaint;
-                });
+        String text = requireNote(comment, "Comment");
+        return execute(null, "COMPLAINT_COMMENT", "The comment could not be saved", () -> {
+            // SQL-scoped parent lookup revalidates own/current-assignment access in this transaction.
+            Complaint complaint = requireComplaint(complaintId);
+            if (complaint.getStatus()==ComplaintStatus.REJECTED || complaint.getStatus()==ComplaintStatus.RESOLVED)
+                throw new AceOsServiceException("Closed complaints are read-only");
+            new com.aceos.repository.ComplaintNoteRepository().append(complaintId,Scope.user(),ComplaintNote.Kind.COMMENT,text);
+            return complaint;
+        });
+    }
+    private static String requireNote(String value, String field) throws AceOsServiceException {
+        if(value==null || value.isBlank()) throw new AceOsServiceException(field + " is required");
+        String text=value.trim();
+        if(text.codePointCount(0,text.length())>2000 || text.codePoints().anyMatch(cp -> cp>=0xD800 && cp<=0xDFFF))
+            throw new AceOsServiceException(field + " must contain valid text of at most 2000 characters");
+        return text;
     }
 
     public WorkOrder assignWorkOrder(int complaintId, int technicianId)

@@ -57,6 +57,7 @@ class FoundationTest {
                 Statement s = c.createStatement()) {
             for (String table :
                     List.of(
+                            "complaint_notes",
                             "action_audit",
                             "asset_safety_holds",
                             "asset_lifecycle_history",
@@ -144,12 +145,86 @@ class FoundationTest {
 
     WorkOrder assigned(Asset asset) throws Exception {
         Complaint c = complaint(requester, asset);
-        admin.acceptComplaint(c.getComplaintId());
+        admin.acceptComplaint(c.getComplaintId(), "Fixture review reason");
         return admin.assignWorkOrder(c.getComplaintId(), 5);
     }
 
     static void denied(org.junit.jupiter.api.function.Executable action) {
         assertThrows(AceOsServiceException.class, action);
+    }
+
+    @Test
+    void complaintNotesOwnershipReviewReasonsAndClosedHistory() throws Exception {
+        var a=asset("NOTES-OWN"); var c=complaint(requester,a);
+        denied(() -> admin.acceptComplaint(c.getComplaintId()));
+        denied(() -> admin.rejectComplaint(c.getComplaintId(),"   "));
+        denied(() -> otherRequester.addComplaintComment(c.getComplaintId(),"Foreign comment"));
+        denied(() -> technician.addComplaintComment(c.getComplaintId(),"Unassigned comment"));
+        denied(() -> new AceOsService().addComplaintComment(c.getComplaintId(),"Anonymous comment"));
+        requester.addComplaintComment(c.getComplaintId()," More symptoms ");
+        assertEquals("More symptoms",requester.getRepairDetail(c.getComplaintId()).notes().getFirst().body());
+        admin.acceptComplaint(c.getComplaintId(),"Repair is appropriate");
+        var work=admin.assignWorkOrder(c.getComplaintId(),5);
+        technician.addComplaintComment(c.getComplaintId(),"Checked power supply");
+        denied(() -> otherTechnician.getRepairDetail(c.getComplaintId()));
+        var notes=requester.getRepairDetail(c.getComplaintId()).notes();
+        assertEquals(List.of(ComplaintNote.Kind.COMMENT,ComplaintNote.Kind.ACCEPT_REASON,ComplaintNote.Kind.COMMENT),notes.stream().map(ComplaintNote::kind).toList());
+        assertEquals(List.of(UserRole.REQUESTER,UserRole.ADMINISTRATOR,UserRole.TECHNICIAN),notes.stream().map(ComplaintNote::authorRole).toList());
+        assertTrue(notes.stream().allMatch(n -> n.at()!=null && !n.authorName().isBlank()));
+        admin.reassignWorkOrder(work.getWorkOrderId(),6);
+        denied(() -> technician.addComplaintComment(c.getComplaintId(),"Old assignment"));
+        denied(() -> technician.getWorkDetail(work.getWorkOrderId()));
+        otherTechnician.addComplaintComment(c.getComplaintId(),"Current assignment");
+        otherTechnician.startWorkOrder(work.getWorkOrderId()); otherTechnician.completeWorkOrder(work.getWorkOrderId(),"Fixed supply"); admin.verifyWorkOrder(work.getWorkOrderId());
+        for(var actor:List.of(requester,admin,otherTechnician)) denied(() -> actor.addComplaintComment(c.getComplaintId(),"Closed comment"));
+        assertEquals(4,requester.getRepairDetail(c.getComplaintId()).notes().size());
+        var rejected=complaint(requester,a); admin.rejectComplaint(rejected.getComplaintId(),"Reported asset is working");
+        denied(() -> requester.addComplaintComment(rejected.getComplaintId(),"Closed rejection"));
+        assertEquals(ComplaintNote.Kind.REJECT_REASON,requester.getRepairDetail(rejected.getComplaintId()).notes().getFirst().kind());
+        denied(() -> otherRequester.getRepairDetail(rejected.getComplaintId()));
+    }
+
+    @Test
+    void complaintNotesBoundsAtomicReviewAndStaleSessions() throws Exception {
+        var c=complaint(requester,asset("NOTES-ATOMIC"));
+        denied(() -> requester.addComplaintComment(c.getComplaintId()," "));
+        denied(() -> requester.addComplaintComment(c.getComplaintId(),"x".repeat(2001)));
+        requester.addComplaintComment(c.getComplaintId(),"\uD83D\uDE00".repeat(2000));
+        assertEquals(2000,requester.getRepairDetail(c.getComplaintId()).notes().getFirst().body().codePointCount(0,4000));
+        try(var connection=operator();var st=connection.createStatement()) {
+            st.execute("ALTER TABLE complaint_notes ADD CONSTRAINT notes_test_failure CHECK (kind='COMMENT')");
+        }
+        try { denied(() -> admin.acceptComplaint(c.getComplaintId(),"Atomic reason")); }
+        finally { try(var connection=operator();var st=connection.createStatement()) { st.execute("ALTER TABLE complaint_notes DROP CHECK notes_test_failure"); } }
+        assertEquals(ComplaintStatus.SUBMITTED,admin.getRepairDetail(c.getComplaintId()).complaint().getStatus());
+        assertEquals(1,admin.getRepairDetail(c.getComplaintId()).notes().size());
+        try(var connection=operator();var p=connection.prepareStatement("SELECT COUNT(*) FROM action_audit WHERE target_id=? AND action='acceptComplaint'")) {
+            p.setInt(1,c.getComplaintId());try(var r=p.executeQuery()) { r.next();assertEquals(0,r.getInt(1)); }
+        }
+        var secondAdmin=login(2);var start=new CountDownLatch(1);var pool=Executors.newFixedThreadPool(2);
+        try {
+            var one=pool.submit(() -> { start.await();try {admin.acceptComplaint(c.getComplaintId(),"Accept reason");return true;} catch(AceOsServiceException e){return false;} });
+            var two=pool.submit(() -> { start.await();try {secondAdmin.rejectComplaint(c.getComplaintId(),"Reject reason");return true;} catch(AceOsServiceException e){return false;} });
+            start.countDown();assertNotEquals(one.get(10,TimeUnit.SECONDS),two.get(10,TimeUnit.SECONDS));
+        } finally { pool.shutdownNow(); }
+        assertEquals(1,requester.getRepairDetail(c.getComplaintId()).notes().stream().filter(n -> n.kind()!=ComplaintNote.Kind.COMMENT).count());
+        var open=complaint(requester,c.getAsset()); admin.issueCredential(3);
+        denied(() -> requester.addComplaintComment(open.getComplaintId(),"Invalidated session"));
+        assertTrue(admin.getRepairDetail(open.getComplaintId()).notes().isEmpty());
+    }
+
+    @Test
+    void complaintNotesMigrationRerunPreservesHistoricalReviews() throws Exception {
+        var c=complaint(requester,asset("NOTES-HISTORY"));
+        try(var connection=operator();var p=connection.prepareStatement("UPDATE complaints SET status='REJECTED' WHERE complaint_id=?")) { p.setInt(1,c.getComplaintId());p.executeUpdate(); }
+        try(var connection=operator()) { Migrations.migrate(connection);Migrations.migrate(connection); }
+        var detail=requester.getRepairDetail(c.getComplaintId());assertEquals(ComplaintStatus.REJECTED,detail.complaint().getStatus());assertTrue(detail.notes().isEmpty());
+        try(var connection=operator();var st=connection.createStatement()) {
+            st.executeUpdate("UPDATE schema_migrations SET status='STARTED' WHERE version=3");
+            try { assertThrows(SQLException.class,() -> Migrations.migrate(connection)); }
+            finally {st.executeUpdate("UPDATE schema_migrations SET status='COMPLETE' WHERE version=3");}
+        }
+        requester.getRepairDetail(c.getComplaintId());
     }
 
     @Test
@@ -212,7 +287,7 @@ class FoundationTest {
         Asset a = asset("PROFILE"); var mine = assigned(a);
         technician.startWorkOrder(mine.getWorkOrderId()); technician.completeWorkOrder(mine.getWorkOrderId(), "Own completion");
         admin.verifyWorkOrder(mine.getWorkOrderId());
-        var c = complaint(otherRequester, a); admin.acceptComplaint(c.getComplaintId());
+        var c = complaint(otherRequester, a); admin.acceptComplaint(c.getComplaintId(), "Fixture review reason");
         var other = admin.assignWorkOrder(c.getComplaintId(), 6);
         otherTechnician.startWorkOrder(other.getWorkOrderId()); otherTechnician.completeWorkOrder(other.getWorkOrderId(), "Other technical completion");
         admin.verifyWorkOrder(other.getWorkOrderId());
@@ -273,7 +348,7 @@ class FoundationTest {
         var own = complaint(requester, a);
         var foreign = complaint(otherRequester, a);
         var accepted = complaint(requester, a);
-        admin.acceptComplaint(accepted.getComplaintId());
+        admin.acceptComplaint(accepted.getComplaintId(), "Fixture review reason");
         assertEquals(2, admin.getDashboardSummary().counts().get("review"));
         assertEquals(1, admin.getDashboardSummary().counts().get("assignment"));
         var work = admin.assignWorkOrder(accepted.getComplaintId(), 5);
@@ -335,7 +410,7 @@ class FoundationTest {
         denied(() -> technician.getRepairDetail(own.getComplaintId()));
         assertNull(requester.getRepairDetail(own.getComplaintId()).work());
         assertEquals(1, requester.getRepairDetail(own.getComplaintId()).timeline().size());
-        admin.acceptComplaint(own.getComplaintId());
+        admin.acceptComplaint(own.getComplaintId(), "Fixture review reason");
         assertTrue(requester.getRepairDetail(own.getComplaintId()).timeline().stream()
                 .anyMatch(e -> e.description().equals("Complaint accepted")));
         denied(() -> admin.acceptComplaint(own.getComplaintId()));
@@ -367,7 +442,7 @@ class FoundationTest {
         assertTrue(otherRequester.getRepairDetail(foreign.getComplaintId()).timeline().stream()
                 .noneMatch(e -> e.description().contains("Repair")));
         var rejected = complaint(otherRequester, a);
-        admin.rejectComplaint(rejected.getComplaintId());
+        admin.rejectComplaint(rejected.getComplaintId(), "Fixture review reason");
         assertTrue(otherRequester.getRepairDetail(rejected.getComplaintId()).timeline().stream()
                 .anyMatch(e -> e.description().equals("Complaint rejected")));
         denied(() -> new AceOsService().getRepairDetail(own.getComplaintId()));
@@ -383,7 +458,7 @@ class FoundationTest {
         denied(() -> complaint(requester, retired));
         admin.changeAssetLifecycle(a.getAssetId(), ManualLifecycle.ACTIVE, ManualLifecycle.OUT_OF_SERVICE, "Hold");
         var c = complaint(requester, a);
-        admin.acceptComplaint(c.getComplaintId());
+        admin.acceptComplaint(c.getComplaintId(), "Fixture review reason");
         assertEquals(Set.of(5, 6), new HashSet<>(admin.getActiveTechnicians().stream().map(User::getUserId).toList()));
         denied(requester::getActiveTechnicians); denied(technician::getActiveTechnicians);
         admin.deactivateAccount(6);
@@ -480,7 +555,7 @@ class FoundationTest {
         denied(() -> requester.submitComplaint(a.getAssetId(), 4, "Spoof", ComplaintPriority.LOW));
         denied(() -> requester.acceptComplaint(own.getComplaintId()));
         denied(() -> technician.submitComplaint(a.getAssetId(), "Spoof", ComplaintPriority.LOW));
-        admin.acceptComplaint(own.getComplaintId());
+        admin.acceptComplaint(own.getComplaintId(), "Fixture review reason");
         WorkOrder w = admin.assignWorkOrder(own.getComplaintId(), 5);
         assertEquals(1, technician.getAllWorkOrders().size());
         assertEquals(0, otherTechnician.getAllWorkOrders().size());

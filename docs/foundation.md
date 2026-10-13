@@ -72,6 +72,8 @@ The local F1 check restored a development backup into a disposable restore schem
 
 ## Verification
 
+The current build requires completed, matching V001, V002 and V003 migration records. **V003__complaint_notes.sql** adds one append-only history table; it does not reinterpret old review events or populate missing historical reasons. Grant runtime SELECT/INSERT on `complaint_notes` after applying it with the isolated operator account. No runtime UPDATE/DELETE is needed for notes. Stop AceOS before schema changes, back up and prove restoration, then migrate only the isolated development/test schemas. Older pre-V003 clients reject the newer migration version; use the current build. The frozen v1.0.0 release continues to use its own original schema.
+
 ```powershell
 # Runtime test connection: ACEOS_DB_URL must name aceos_next_test.
 # Private operator fixture connection: ACEOS_TEST_OPERATOR_USER / ACEOS_TEST_OPERATOR_PASSWORD.
@@ -170,3 +172,15 @@ Assets has Register asset and a protected Back to assets action; inspection, pre
 Seven focused JavaFX checks passed with no failures/errors/skips. Coverage includes exact sidebar order/count, keyboard-focusable buttons, dashboard queue filters, parent-tab highlights, creation routes, retained registration input on Stay, protected departure and role denials at 800x520 and 1280x800. Controlled snapshots were visually reviewed. No service, repository, database policy or workflow-state changes were made.
 
 During the local human walkthrough, Smit confirmed administrator sign-in, requester/technician activation/sign-in and complaint-to-verified-repair progress. He reported the functional walkthroughs were okay. This does not establish screen-reader behavior or an explicit reset/invalidation check across live windows; those human checks remain open.
+
+## Phase 4 complaint comments and review reasons
+
+Requesters post comments on their own open complaints; technicians post only on complaints linked to their current assigned repair; administrators post on any open complaint. All existing role/session/SQL read scopes still apply. Resolved or rejected complaints are read-only. Notes show author name, role at posting and recorded time to authorized participants only; they add no email/contact projection. Comments and acceptance/rejection reasons are append-only, with a 2,000-Unicode-character limit. Acceptance and rejection both require a reason, saved in the same transaction as the status transition and audit event. Reasonless legacy entry points cannot bypass this requirement. Historical reviews with no reason are explicitly labelled without invented text or times.
+
+Connected complaint/repair details contain associated reason/comment inputs and actions. Background writes freeze all action inputs and suppress duplicates. Failed saves retain drafts and require refreshed progress before retry; successful saves clear only their own input, preserve unrelated drafts and remain explicit through read failure. Closed/already-reviewed records retain unfinished drafts for copying without enabling further writes. Shared departure protection and the seven-tab administrator sidebar remain in force.
+
+V003 was applied only to aceos_next_dev and aceos_next_test after both backups restored with all 14 table checksums matching. All 13 pre-existing development data tables matched after migration; V001/V002 history was preserved and no historical notes were synthesized. Private backups and restore schemas are retained locally; the valuable original aceos database was not copied, reset or migrated.
+
+Final focused verification passed eight database and eight JavaFX checks with zero failures/errors/skips: three new database and three new UI checks plus ten affected regression checks. Coverage includes ownership/reassignment/closed/session denial, Unicode limits, atomic failure rollback, concurrent review, migration rerun/interruption/history, required reasons, author/role/time display, role-shell supported-size layouts and action reachability, duplicate protection, retained drafts, protected departure and saved-result/read-failure recovery. Controlled snapshots at 800x520 and 1280x800 were visually reviewed. Smit confirmed the private live comments/review-reasons walkthrough works. Earlier keyboard/screen-reader and explicit live reset/invalidation/action-feedback checks remain open; this does not claim every edge case was individually exercised live.
+
+This chunk adds no withdrawal/reopening, private administrator notes, comment edit/delete, changed repair/availability states, new release/tag or deployment.

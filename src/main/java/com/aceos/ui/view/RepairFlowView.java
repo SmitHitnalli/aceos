@@ -36,7 +36,7 @@ public final class RepairFlowView extends ScrollPane {
     private final javafx.collections.ObservableList<Row> rows = FXCollections.observableArrayList();
     private final TextField search = new TextField();
     private final ComboBox<String> status = new ComboBox<>();
-    private final TextArea completion = new TextArea();
+    private final TextArea completion = new TextArea(), reviewReason = new TextArea(), comment = new TextArea();
     private final SearchSelector<User> technicians = new SearchSelector<>("Technician", "repair-technician",
             u -> u.getName() + " · " + u.getEmail() + " · #" + u.getUserId(), User::getUserId);
     private Integer selectedId;
@@ -49,7 +49,7 @@ public final class RepairFlowView extends ScrollPane {
 
     public RepairFlowView(AceOsService service, boolean jobs, String filter, Integer recordId) {
         this.service = service; this.jobs = jobs;
-        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !completion.getText().isEmpty() || technicians.selected() != null);
+        com.aceos.ui.NavigationGuard.install(this, () -> saving, () -> !completion.getText().isEmpty() || !reviewReason.getText().isEmpty() || !comment.getText().isEmpty() || technicians.selected() != null);
         UserRole current;
         try { current = service.signedInUser().getRole(); }
         catch (AceOsServiceException e) { current = null; }
@@ -61,7 +61,7 @@ public final class RepairFlowView extends ScrollPane {
         refresh.setId("repair-refresh"); refresh.setOnAction(e -> { if (selectedId == null) loadList(); else loadDetail(); });
         back.setId("repair-back"); back.setOnAction(e -> {
             if (!com.aceos.ui.NavigationGuard.allowLeave(this)) return;
-            savedFeedback = null; selectedId = null; completion.clear(); technicians.clear(); showList(); loadList();
+            savedFeedback = null; selectedId = null; completion.clear(); reviewReason.clear(); comment.clear(); technicians.clear(); showList(); loadList();
         });
         feedback.setId("repair-feedback"); feedback.setWrapText(true);
         var header = new FlowPane(12, 8, heading, refresh, back);
@@ -102,6 +102,8 @@ public final class RepairFlowView extends ScrollPane {
         list.getChildren().addAll(searchLabel, search, new FlowPane(8, 8, statusLabel, status), table, open);
         completion.setId("repair-completion"); completion.setPromptText("Describe the work performed");
         completion.setWrapText(true); completion.setPrefRowCount(3);
+        for (var field : new TextArea[]{reviewReason,comment}) { field.setWrapText(true); field.setPrefRowCount(3); field.setPromptText("Up to 2000 characters; visible to authorized complaint participants"); }
+        reviewReason.setId("repair-review-reason"); comment.setId("repair-comment");
         detail.setId("repair-detail"); detail.getStyleClass().add("dashboard-card");
         setContent(content);
         if (recordId == null) { showList(); loadList(); }
@@ -132,7 +134,7 @@ public final class RepairFlowView extends ScrollPane {
     private void openSelected() {
         if (busy || table.getSelectionModel().getSelectedItem() == null) return;
         selectedId = table.getSelectionModel().getSelectedItem().id();
-        completion.clear(); technicians.clear(); showDetail(); loadDetail();
+        completion.clear(); reviewReason.clear(); comment.clear(); technicians.clear(); showDetail(); loadDetail();
     }
 
     private void loadList() {
@@ -180,10 +182,16 @@ public final class RepairFlowView extends ScrollPane {
             detail.getChildren().add(text("Reported by " + c.getReportedBy().getName(), "muted"));
         if (w != null) detail.getChildren().add(text("Assigned technician: " + w.getTechnician().getName(), "muted"));
         if (data.actionTaken() != null) detail.getChildren().addAll(text("Work performed", "section-title"), text(data.actionTaken(), ""));
+        reviewReason.setEditable(c.getStatus()==ComplaintStatus.SUBMITTED);
+        if (role==UserRole.ADMINISTRATOR && c.getStatus()!=ComplaintStatus.SUBMITTED && !reviewReason.getText().isEmpty()) {
+            Label retained = new Label("Retained review draft (already reviewed; copy before leaving)"); retained.setLabelFor(reviewReason);
+            actions.getChildren().addAll(retained,reviewReason);
+        }
         if (role == UserRole.ADMINISTRATOR && c.getStatus() == ComplaintStatus.SUBMITTED) {
-            actions.getChildren().add(new FlowPane(8, 8,
-                    action("Accept complaint", "repair-accept", () -> service.acceptComplaint(c.getComplaintId())),
-                    action("Reject complaint", "repair-reject", () -> service.rejectComplaint(c.getComplaintId()))));
+            Label reasonLabel = new Label("Review reason (required)"); reasonLabel.setLabelFor(reviewReason);
+            actions.getChildren().addAll(reasonLabel,reviewReason,new FlowPane(8,8,
+                    reviewAction("Accept complaint","repair-accept",c.getComplaintId(),true),
+                    reviewAction("Reject complaint","repair-reject",c.getComplaintId(),false)));
         }
         if (role == UserRole.ADMINISTRATOR && (c.getStatus() == ComplaintStatus.ACCEPTED || w != null && w.getStatus() == WorkOrderStatus.ASSIGNED)) {
             technicians.setItems(loaded.technicians());
@@ -216,6 +224,26 @@ public final class RepairFlowView extends ScrollPane {
         }
         if (role == UserRole.ADMINISTRATOR && w != null && w.getStatus() == WorkOrderStatus.COMPLETED)
             actions.getChildren().add(action("Verify completed repair", "repair-verify", () -> service.verifyWorkOrder(w.getWorkOrderId())));
+        detail.getChildren().add(text("Comments and review reasons", "section-title"));
+        if (data.notes().isEmpty()) detail.getChildren().add(text("No comments or recorded review reasons.", "muted"));
+        boolean hasReason = data.notes().stream().anyMatch(n -> n.kind()!=ComplaintNote.Kind.COMMENT);
+        if (c.getStatus()!=ComplaintStatus.SUBMITTED && !hasReason)
+            detail.getChildren().add(text("Review reason was not recorded for this historical complaint.", "muted"));
+        for (var note : data.notes()) detail.getChildren().addAll(
+                text(note.kind().name().replace('_',' ') + " · " + note.authorName() + " · " + note.authorRole() + " · "
+                        + note.at().format(DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm:ss")),"muted"), text(note.body(),""));
+        boolean closed = c.getStatus()==ComplaintStatus.REJECTED || c.getStatus()==ComplaintStatus.RESOLVED;
+        comment.setEditable(!closed);
+        if (!closed || !comment.getText().isEmpty()) {
+            Label commentLabel = new Label(closed ? "Retained draft (closed complaint; copy before leaving)" : "Add comment"); commentLabel.setLabelFor(comment);
+            actions.getChildren().addAll(commentLabel,comment);
+            if (!closed) {
+                Button post = new Button("Post comment"); post.setId("repair-comment-save"); post.getStyleClass().add("primary");
+                post.setOnAction(e -> { String input=comment.getText(); if (!validNote(input,"Comment")) return; mutate(() -> service.addComplaintComment(c.getComplaintId(),input), comment::clear, "Comment saved successfully."); });
+                actions.getChildren().add(post);
+            }
+        }
+        if (closed) detail.getChildren().add(text("Closed complaint: comments and review reasons are read-only.","muted"));
         if (!actions.getChildren().isEmpty()) detail.getChildren().add(actions);
         detail.getChildren().add(text("Timeline", "section-title"));
         for (var event : data.timeline()) detail.getChildren().add(text(
@@ -224,17 +252,39 @@ public final class RepairFlowView extends ScrollPane {
         if (w != null && w.getStatus() == WorkOrderStatus.COMPLETED) detail.getChildren().add(text("Completion is awaiting administrator verification.", "muted"));
     }
 
+    private boolean validNote(String input, String field) {
+        if(input.isBlank() || input.trim().codePointCount(0,input.trim().length())>2000) {
+            message(field + " is required and must be at most 2000 characters.",true); setVvalue(0); return false;
+        }
+        return true;
+    }
+
+    private Button reviewAction(String name, String id, int complaintId, boolean accept) {
+        Button button = new Button(name); button.setId(id); button.getStyleClass().add("primary");
+        button.setOnAction(e -> {
+            String reason = reviewReason.getText();
+            if (!validNote(reason,"Review reason")) return;
+            mutate(() -> accept ? service.acceptComplaint(complaintId,reason) : service.rejectComplaint(complaintId,reason),
+                    reviewReason::clear, accept ? "Complaint accepted; reason saved." : "Complaint rejected; reason saved.");
+        });
+        return button;
+    }
+
     private Button action(String name, String id, Callable<?> operation) {
         Button button = new Button(name); button.setId(id); button.setWrapText(true);
         button.getStyleClass().add("primary"); button.setOnAction(e -> mutate(operation)); return button;
     }
 
     private void mutate(Callable<?> operation) {
-        if (busy) return;
+        mutate(operation, () -> { completion.clear(); technicians.clear(); }, "Action saved successfully.");
+    }
+
+    private void mutate(Callable<?> operation, Runnable clearSavedInput, String success) {
+        if (busy || actions.isDisabled()) return;
         saving = true; savedFeedback = null; setBusy(true); actions.setDisable(true); message("Saving…", false);
         FxTasks.run(operation, result -> {
-            completion.clear(); technicians.clear();
-            saving = false; savedFeedback = "Action saved successfully."; setBusy(false); loadDetail(); setVvalue(0);
+            clearSavedInput.run();
+            saving = false; savedFeedback = success; setBusy(false); loadDetail(); setVvalue(0);
         }, error -> {
             saving = false; message(error.getMessage() + " Input retained. Refresh current progress before retrying.", true);
             setVvalue(0);

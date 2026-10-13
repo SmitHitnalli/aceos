@@ -68,6 +68,6 @@ public final class RepairFlowRepository {
             }
         }
         events.sort(java.util.Comparator.comparing(RepairDetail.Event::at));
-        return new RepairDetail(complaint, work, action, events);
+        return new RepairDetail(complaint, work, action, events, new ComplaintNoteRepository().list(complaint.getComplaintId()));
     }
 }

@@ -42,7 +42,7 @@ public final class Migrations {
                         "CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY,"
                             + " checksum CHAR(64) NOT NULL, status VARCHAR(20) NOT NULL)");
                 preflight(c);
-                for (int version = 1; version <= 2; version++) apply(c, version);
+                for (int version = 1; version <= 3; version++) apply(c, version);
                 assertCompatible(c);
             } finally {
                 s.execute("SELECT RELEASE_LOCK('aceos_foundation_migration')");
@@ -72,7 +72,7 @@ public final class Migrations {
     }
 
     private static byte[] resource(int version) throws SQLException {
-        String name = version == 1 ? "V001__accounts.sql" : "V002__availability.sql";
+        String name = switch(version) { case 1 -> "V001__accounts.sql"; case 2 -> "V002__availability.sql"; case 3 -> "V003__complaint_notes.sql"; default -> throw new SQLException("Unsupported migration version"); };
         try (var in = Migrations.class.getResourceAsStream("/database/" + name)) {
             if (in == null) throw new SQLException("Missing migration resource");
             return in.readAllBytes();
@@ -132,10 +132,10 @@ public final class Migrations {
     public static void assertCompatible(Connection c) throws SQLException {
         try (var s = c.createStatement(); var r = s.executeQuery(
                 "SELECT version,status,checksum FROM schema_migrations ORDER BY version")) {
-            for (int version = 1; version <= 2; version++) {
+            for (int version = 1; version <= 3; version++) {
                 if (!r.next() || r.getInt(1) != version || !"COMPLETE".equals(r.getString(2))
                         || !checksum(resource(version)).equals(r.getString(3)))
-                    throw new SQLException("Run reviewed F1/F2 migrations; incompatible version/checksum");
+                    throw new SQLException("Run reviewed migrations; incompatible version/checksum");
             }
             if (r.next()) throw new SQLException("Unsupported migration version");
         }
@@ -145,6 +145,7 @@ public final class Migrations {
             s.executeQuery("SELECT manual_lifecycle FROM assets LIMIT 0").close();
             s.executeQuery("SELECT clearance_reason FROM asset_safety_holds LIMIT 0").close();
             s.executeQuery("SELECT reason FROM asset_lifecycle_history LIMIT 0").close();
+            s.executeQuery("SELECT note_id,body,author_role,kind,recorded_at FROM complaint_notes LIMIT 0").close();
         }
     }
     /** Git checkouts may use CRLF on Windows; line endings must not change migration identity. */
