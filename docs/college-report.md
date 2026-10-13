@@ -114,7 +114,7 @@ The final result is a coherent role-based application with traceable repair corr
 
 ## 12 Source references
 
-The report describes the local v2.0.0 college freeze on codex/role-based-foundation, based on pushed bc8096b13a03492c30162ba3b9cd7c57703cb5e6. The local annotated v2.0.0 tag identifies frozen source; GitHub publication is separate and branch links may still show earlier content.
+The report describes the completed v2.0.0 college application. Current source and documentation are maintained on main. The annotated v2.0.0 tag identifies the packaged source; the GitHub release provides the college package, source archive and SHA-256 checksums.
 
 - pom.xml and src/main/resources/database/V000__baseline.sql through V005__repair_corrections.sql
 - src/main/java/com/aceos/model/Complaint.java and WorkOrder.java

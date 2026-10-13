@@ -6,7 +6,15 @@ AceOS (Asset, Compliance & Equipment Operations System) is a local JavaFX applic
 
 The college feature scope is closed. Accounts and sessions, role workspaces, connected management screens, comments/review reasons, technician workload, complaint withdrawal/reopening and repair return/correction are implemented. Smit confirmed the role walkthroughs, remaining keyboard/screen-reader/reset/invalidation/feedback checks and the five-step repair-return walkthrough. Human confirmations are separate from automated verification.
 
-The selected college freeze is **v2.0.0**, identified by its local annotated tag on `codex/role-based-foundation`. Maven now reports 2.0.0. The published [v1.0.0 baseline](https://github.com/SmitHitnalli/aceos/releases/tag/v1.0.0) remains preserved. Local freezing does not publish a GitHub release; publication is separate. See [freeze and package notes](docs/release-v2.0.0.md).
+The current release is **[v2.0.0](https://github.com/SmitHitnalli/aceos/releases/tag/v2.0.0)**. The completed application and current documentation are maintained on `main`; the release tag identifies its packaged source. The earlier [v1.0.0 release](https://github.com/SmitHitnalli/aceos/releases/tag/v1.0.0) remains available. See [release and package notes](docs/release-v2.0.0.md).
+
+### Downloads
+
+- [College package](https://github.com/SmitHitnalli/aceos/releases/download/v2.0.0/AceOS-v2.0.0-college.zip): application, runtime libraries, source, report, launcher and verification evidence.
+- [Source archive](https://github.com/SmitHitnalli/aceos/releases/download/v2.0.0/AceOS-v2.0.0-source.zip): tagged source for inspection or rebuilding.
+- [Checksums](https://github.com/SmitHitnalli/aceos/releases/download/v2.0.0/SHA256SUMS.txt): SHA-256 hashes for both archives.
+
+Start with `START-HERE.md` inside the college package. Java 24 and a separately configured MySQL 8 database are required; database credentials and data are not bundled.
 
 Java 24, JavaFX 24.0.2, JDBC/MySQL 8 and Maven remain the stack. Models express lifecycle rules; services authorize and coordinate transactions; repositories contain SQL; JavaFX runs database operations in the background.
 

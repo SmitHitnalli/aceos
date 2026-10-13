@@ -1,6 +1,6 @@
 # AceOS v2.0.0 college freeze
 
-Selected by Smit on 13 October 2026. v2.0.0 separates the final account-enabled, migrated college application from preserved v1.0.0. The release identity is the local annotated `v2.0.0` tag on `codex/role-based-foundation`; publication to GitHub is a separate action.
+Selected on 13 October 2026. v2.0.0 is the final account-enabled, migrated college application, published on [GitHub](https://github.com/SmitHitnalli/aceos/releases/tag/v2.0.0). The completed application is maintained on `main`; the annotated `v2.0.0` tag identifies the source used for the release packages. The earlier v1.0.0 tag, release and assets remain preserved.
 
 ## Frozen feature scope
 
@@ -16,4 +16,4 @@ Documentation/schema/link and packaging identity/integrity checks supplement the
 
 The college ZIP includes the application, nine runtime JARs, source, migrations, current report/reference documents, launcher and final test evidence. Java24 and separate MySQL8 configuration are prerequisites; credentials, backups, .local and .git are excluded. A separate source ZIP contains the exact frozen source tree. Per-file and archive SHA-256 checks identify the outputs. See distribution/START-HERE.md and docs/foundation.md.
 
-Published v1.0.0 references are unchanged. A local v2.0.0 freeze does not assert that a GitHub tag/release or deployment has been published.
+The release includes the college ZIP, source ZIP and SHA256SUMS.txt. Check the published hashes after downloading. Documentation and packaging may be refreshed without changing the verified application JAR. No deployment is included.
