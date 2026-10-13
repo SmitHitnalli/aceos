@@ -16,6 +16,7 @@ import com.aceos.model.InspectionStatus;
 import com.aceos.model.MaintenanceRecord;
 import com.aceos.model.MaintenanceScheduleStatus;
 import com.aceos.model.PreventiveMaintenanceSchedule;
+import com.aceos.model.TechnicianWorkload;
 import com.aceos.model.User;
 import com.aceos.model.UserRole;
 import com.aceos.model.WorkOrder;
@@ -655,6 +656,11 @@ public class AceOsService {
     public List<User> getActiveTechnicians() throws AceOsServiceException {
         return execute(UserRole.ADMINISTRATOR, "getActiveTechnicians", "Technicians could not be loaded",
                 () -> new com.aceos.repository.RepairFlowRepository().activeTechnicians());
+    }
+
+    public List<TechnicianWorkload> getTechnicianWorkloads() throws AceOsServiceException {
+        return execute(UserRole.ADMINISTRATOR, "getTechnicianWorkloads", "Technician workloads could not be loaded",
+                () -> new com.aceos.repository.TechnicianWorkloadRepository().load(LocalDate.now()));
     }
 
     public com.aceos.model.RepairDetail getRepairDetail(int complaintId) throws AceOsServiceException {

@@ -18,7 +18,7 @@ import java.util.function.Function;
 
 /** Inspection navigation and forms reuse service authorization and transactional actions. */
 public class InspectionFlowView extends ScrollPane {
-    private record Detail(AssetInspection inspection, List<User> technicians) {}
+    private record Detail(AssetInspection inspection, List<TechnicianWorkload> technicians) {}
     private final AceOsService service;
     private final User user;
     private final VBox content = new VBox(16), list = new VBox(12), details = new VBox(12), actions = new VBox(12), scheduling = new VBox(12);
@@ -30,8 +30,7 @@ public class InspectionFlowView extends ScrollPane {
     private final ComboBox<String> filter = new ComboBox<>();
     private final SearchSelector<Asset> assets = new SearchSelector<>("Asset", "inspection-asset",
             a -> a.getAssetCode() + " · " + a.getName() + " · " + a.getLocation() + " · " + a.getStatus(), Asset::getAssetId);
-    private final SearchSelector<User> technicians = new SearchSelector<>("Active technician", "inspection-technician",
-            u -> u.getName() + " · " + u.getEmail() + " · #" + u.getUserId(), User::getUserId);
+    private final TechnicianSelector technicians = new TechnicianSelector("inspection-technician");
     private final ComboBox<InspectionStatus> result = new ComboBox<>();
     private final TextArea notes = new TextArea();
     private final DatePicker scheduled = new DatePicker(LocalDate.now().plusDays(7)), completed = new DatePicker(LocalDate.now());
@@ -148,7 +147,12 @@ public class InspectionFlowView extends ScrollPane {
         } else {
             details.getChildren().clear(); actions.getChildren().clear(); content.getChildren().add(details);
             int id = selectedId;
-            FxTasks.run(() -> new Detail(service.getAssetInspection(id), user.getRole() == UserRole.ADMINISTRATOR ? service.getActiveTechnicians() : List.of()),
+            FxTasks.run(() -> {
+                var inspection = service.getAssetInspection(id);
+                boolean choose = user.getRole() == UserRole.ADMINISTRATOR && inspection.getStatus() == InspectionStatus.SCHEDULED
+                        && inspection.getAsset().getManualLifecycle() != ManualLifecycle.RETIRED;
+                return new Detail(inspection, choose ? service.getTechnicianWorkloads() : List.of());
+            },
                     loaded -> { render(loaded); stale = false; message(success == null ? "Inspection details updated." : success, false); },
                     e -> message((success == null ? e.getMessage() : success + " Details could not be refreshed.") + " Refresh or return to the list.", true), () -> { busy = false; updateButtons(); });
         }
@@ -162,7 +166,7 @@ public class InspectionFlowView extends ScrollPane {
         details.getChildren().add(text("A failed inspection creates its own safety hold. A passing result does not clear existing holds.", "muted"));
         if (i.getStatus() != InspectionStatus.SCHEDULED || a.getManualLifecycle() == ManualLifecycle.RETIRED) return;
         if (user.getRole() == UserRole.ADMINISTRATOR) {
-            technicians.setItems(loaded.technicians()); save.setText(i.getAssignedTechnicianId() == 0 ? "Assign inspection" : "Reassign inspection");
+            technicians.setItems(loaded.technicians(), i.getAssignedTechnicianId()); save.setText(i.getAssignedTechnicianId() == 0 ? "Assign inspection" : "Reassign inspection");
             actions.getChildren().setAll(text("Assignment", "section-title"), technicians, save);
             if (technicians.isEmpty()) actions.getChildren().add(text("No active technicians available. Refresh after an administrator activates one.", "muted"));
         } else if (i.getAssignedTechnicianId() == user.getUserId()) {

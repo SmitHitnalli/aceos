@@ -418,6 +418,7 @@ class UiSmokeTest {
         @Override public com.aceos.model.User signedInUser() { return new com.aceos.model.User(1, "Example user", "example@aceos.local", role); }
         @Override public java.util.List<com.aceos.model.Asset> getAllAssets() { background(); return java.util.List.of(asset); }
         @Override public java.util.List<com.aceos.model.User> getActiveTechnicians() { background(); return techniciansAvailable ? java.util.List.of(technician) : java.util.List.of(); }
+        @Override public java.util.List<com.aceos.model.TechnicianWorkload> getTechnicianWorkloads() { assertEquals(com.aceos.model.UserRole.ADMINISTRATOR,role);return getActiveTechnicians().stream().map(u -> new com.aceos.model.TechnicianWorkload(u,0,0,0,0,0)).toList(); }
         @Override public java.util.List<com.aceos.model.Complaint> getAllComplaints() throws com.aceos.service.AceOsServiceException {
             background(); reads.incrementAndGet();
             if (gate != null) try { gate.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { throw new RuntimeException(e); }
@@ -648,6 +649,7 @@ class UiSmokeTest {
         @Override public com.aceos.model.AssetInspection getAssetInspection(int id) throws com.aceos.service.AceOsServiceException { read(); assertEquals(71, id); return inspection; }
         @Override public java.util.List<com.aceos.model.Asset> getAllAssets() throws com.aceos.service.AceOsServiceException { read(); return empty ? java.util.List.of() : java.util.List.of(asset); }
         @Override public java.util.List<com.aceos.model.User> getActiveTechnicians() throws com.aceos.service.AceOsServiceException { read(); return noTechnicians ? java.util.List.of() : java.util.List.of(technician); }
+        @Override public java.util.List<com.aceos.model.TechnicianWorkload> getTechnicianWorkloads() throws com.aceos.service.AceOsServiceException { assertEquals(com.aceos.model.UserRole.ADMINISTRATOR,role);return getActiveTechnicians().stream().map(u -> new com.aceos.model.TechnicianWorkload(u,0,0,0,0,0)).toList(); }
         @Override public com.aceos.model.AssetInspection scheduleAssetInspection(int id, String type, java.time.LocalDate date) throws com.aceos.service.AceOsServiceException {
             assertEquals(11, id); write(); inspection = new com.aceos.model.AssetInspection(71, asset, type, date, com.aceos.model.InspectionStatus.SCHEDULED, null, null, null); return inspection;
         }
@@ -1226,6 +1228,7 @@ class UiSmokeTest {
         }
         @Override public java.util.List<com.aceos.model.Complaint> getAllComplaints() { return java.util.List.of(fixture.complaint); }
         @Override public java.util.List<com.aceos.model.User> getActiveTechnicians() { return java.util.List.of(fixture.technician); }
+        @Override public java.util.List<com.aceos.model.TechnicianWorkload> getTechnicianWorkloads() { return getActiveTechnicians().stream().map(u -> new com.aceos.model.TechnicianWorkload(u,0,0,0,0,0)).toList(); }
         @Override public com.aceos.model.DashboardSummary getDashboardSummary() { return new com.aceos.model.DashboardSummary(java.util.Map.of(),java.util.List.of()); }
         void append(String body,com.aceos.model.ComplaintNote.Kind kind) throws com.aceos.service.AceOsServiceException {
             assertFalse(Platform.isFxApplicationThread());writes.incrementAndGet();
@@ -1403,6 +1406,7 @@ class UiSmokeTest {
                 @Override public com.aceos.model.Complaint acceptComplaint(int id,String reason) { fixture.complaint.accept(signedInUser()); writes.incrementAndGet(); failRead.set(true); return fixture.complaint; }
                 @Override public java.util.List<com.aceos.model.Complaint> getAllComplaints() { return java.util.List.of(fixture.complaint); }
         @Override public java.util.List<com.aceos.model.User> getActiveTechnicians() { return java.util.List.of(fixture.technician); }
+        @Override public java.util.List<com.aceos.model.TechnicianWorkload> getTechnicianWorkloads() { return getActiveTechnicians().stream().map(u -> new com.aceos.model.TechnicianWorkload(u,0,0,0,0,0)).toList(); }
             };
             var root=new java.util.concurrent.atomic.AtomicReference<RepairFlowView>();
             fx(() -> { var v=new RepairFlowView(service,false,null,42); root.set(v); new Scene(v,size[0],size[1]); return null; }); awaitControl(root.get(),"repair-refresh");
@@ -1414,6 +1418,134 @@ class UiSmokeTest {
             fx(() -> { var v=profile.get(); ((javafx.scene.control.TextArea)v.lookup("#availability-reason")).setText("Keep my reason"); @SuppressWarnings("unchecked") var lifecycle=(javafx.scene.control.ComboBox<com.aceos.model.ManualLifecycle>)v.lookup("#availability-lifecycle"); lifecycle.setValue(com.aceos.model.ManualLifecycle.OUT_OF_SERVICE); asset.gate=new CountDownLatch(1); fire(v,"availability-change"); return null; });
             awaitFx(() -> asset.writes.get()==1,true); asset.failRead=true; asset.gate.countDown(); awaitControl(profile.get(),"asset-profile-refresh");
             fx(() -> { var v=profile.get(); assertTrue(((javafx.scene.control.Label)v.lookup("#asset-profile-feedback")).getText().contains("Lifecycle saved.")); assertNull(v.lookup("#availability-change")); asset.failRead=false; fire(v,"asset-profile-refresh"); return null; }); awaitControl(profile.get(),"asset-profile-refresh"); assertEquals(1,asset.writes.get());
+        }
+    }
+
+    private static final class WorkloadPreview extends AceOsService {
+        final FlowPreview repair = new FlowPreview(com.aceos.model.UserRole.ADMINISTRATOR,true);
+        final InspectionPreview inspection = new InspectionPreview(com.aceos.model.UserRole.ADMINISTRATOR);
+        final com.aceos.model.User other = new com.aceos.model.User(6,"Second technician with a longer display name","second@aceos.local",com.aceos.model.UserRole.TECHNICIAN);
+        volatile java.util.List<com.aceos.model.TechnicianWorkload> workloads = java.util.List.of(
+                new com.aceos.model.TechnicianWorkload(repair.technician,2,1,3,4,1),
+                new com.aceos.model.TechnicianWorkload(other,0,0,0,0,0));
+        volatile boolean failWorkloads, failWrite, failAfterSave;
+        volatile CountDownLatch gate;
+        final java.util.concurrent.atomic.AtomicInteger writes=new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicInteger reads=new java.util.concurrent.atomic.AtomicInteger();
+        @Override public com.aceos.model.User signedInUser() { return repair.signedInUser(); }
+        @Override public com.aceos.model.RepairDetail getRepairDetail(int id) { return repair.detail(); }
+        @Override public com.aceos.model.AssetInspection getAssetInspection(int id) { return inspection.inspection; }
+        @Override public com.aceos.model.DashboardSummary getDashboardSummary() {
+            return new com.aceos.model.DashboardSummary(java.util.Map.of(),java.util.List.of(
+                    new com.aceos.model.DashboardSummary.Item("Complaint",42,"AC-101","WORK_ORDER_CREATED","Repair"),
+                    new com.aceos.model.DashboardSummary.Item("Inspection",71,"AC-101","SCHEDULED","Safety")));
+        }
+        @Override public java.util.List<com.aceos.model.TechnicianWorkload> getTechnicianWorkloads() throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread());reads.incrementAndGet();
+            if(failWorkloads) throw new com.aceos.service.AceOsServiceException("Workload read failed");
+            return workloads;
+        }
+        void save(int target) throws com.aceos.service.AceOsServiceException {
+            assertFalse(Platform.isFxApplicationThread());assertEquals(6,target);writes.incrementAndGet();
+            if(gate!=null)try{gate.await(5,TimeUnit.SECONDS);}catch(InterruptedException e){throw new RuntimeException(e);}
+            if(failWrite)throw new com.aceos.service.AceOsServiceException("Assignment failed");
+            workloads=java.util.List.of(new com.aceos.model.TechnicianWorkload(other,1,0,0,1,0));
+            failWorkloads=failAfterSave;
+        }
+        @Override public void reassignWorkOrder(int id,int target) throws com.aceos.service.AceOsServiceException {
+            assertEquals(51,id);save(target);repair.work=new com.aceos.model.WorkOrder(51,repair.complaint,other,
+                    com.aceos.model.WorkOrderStatus.ASSIGNED,repair.work.getAssignedAt(),null,null,null);
+        }
+        @Override public void assignInspection(int id,int target) throws com.aceos.service.AceOsServiceException {
+            assertEquals(71,id);save(target);inspection.inspection.setAssignedTechnicianId(target);
+        }
+    }
+
+    private javafx.scene.control.ComboBox<?> workloadChoice(Region root,String prefix) {
+        return (javafx.scene.control.ComboBox<?>)root.lookup("#"+prefix+"-technician-choice");
+    }
+    private String workloadText(Region root,String prefix) {
+        return ((javafx.scene.control.Label)root.lookup("#"+prefix+"-technician-workload")).getText();
+    }
+    private Region workloadView(WorkloadPreview service,boolean inspection,int[] size) {
+        Region v=inspection?new com.aceos.ui.view.InspectionFlowView(service,null,71,false):new RepairFlowView(service,false,null,42);
+        new Scene(v,size[0],size[1]);return v;
+    }
+
+    @Test
+    void workloadAssignmentComparisonSearchRefreshAndLayouts() throws Exception {
+        for(boolean inspection:new boolean[]{false,true})for(int[] size:new int[][]{{800,520},{1280,800}}) {
+            var service=new WorkloadPreview();var root=new java.util.concurrent.atomic.AtomicReference<Region>();
+            String prefix=inspection?"inspection":"repair",action=inspection?"inspection-save":"repair-assign";
+            fx(() -> {root.set(workloadView(service,inspection,size));return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {
+                assertNull(workloadChoice(root.get(),prefix).getValue());
+                workloadChoice(root.get(),prefix).getSelectionModel().selectFirst();
+                String text=workloadText(root.get(),prefix);assertTrue(text.contains("Current assignee"));
+                for(String expected:java.util.List.of("Repairs awaiting start: 2","Repairs in progress: 1","Awaiting verification: 3","Scheduled inspections: 4","Overdue inspections: 1"))assertTrue(text.contains(expected));
+                snapshot(root.get(),size,"workload-"+prefix+"-top",true);
+                ((javafx.scene.control.TextField)root.get().lookup("#"+prefix+"-technician-search")).setText("second@aceos");
+                assertEquals(1,workloadChoice(root.get(),prefix).getItems().size());workloadChoice(root.get(),prefix).getSelectionModel().selectFirst();
+                assertTrue(workloadText(root.get(),prefix).contains("Repairs awaiting start: 0"));
+                fire(root.get(),prefix+"-refresh");return null;
+            });awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {
+                assertEquals(6,((com.aceos.model.TechnicianWorkload)workloadChoice(root.get(),prefix).getValue()).technician().getUserId());
+                ((javafx.scene.control.ScrollPane)root.get()).setVvalue(1);root.get().layout();
+                snapshot(root.get(),size,"workload-"+prefix+"-bottom",true);
+                var bounds=root.get().lookup("#"+action).localToScene(root.get().lookup("#"+action).getBoundsInLocal());
+                assertTrue(bounds.getMinY()>=0 && bounds.getMaxY()<=size[1]);assertTrue(root.get().lookup("#"+action).isFocusTraversable());
+                fire(root.get(),action);return null;
+            });awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {
+                assertEquals(1,service.writes.get());assertNull(workloadChoice(root.get(),prefix).getValue());
+                workloadChoice(root.get(),prefix).getSelectionModel().selectFirst();
+                assertTrue(workloadText(root.get(),prefix).contains("Repairs awaiting start: 1"));
+                assertTrue(workloadText(root.get(),prefix).contains("Current assignee"));return null;
+            });
+        }
+    }
+
+    @Test
+    void workloadRoleShellLayoutsAndProtectedDeparture() throws Exception {
+        for(boolean inspection:new boolean[]{false,true})for(int[] size:new int[][]{{800,520},{1280,800}}) {
+            var service=new WorkloadPreview();var root=new java.util.concurrent.atomic.AtomicReference<com.aceos.ui.WorkspaceView>();
+            String prefix=inspection?"inspection":"repair",action=inspection?"inspection-save":"repair-assign";
+            fx(() -> {root.set(new com.aceos.ui.WorkspaceView(service,() -> {},() -> {}));new Scene(root.get(),size[0],size[1]);return null;});awaitControl(root.get(),"dashboard-refresh");
+            fx(() -> {fire(root.get(),inspection?"dashboard-record-inspection-71":"dashboard-record-complaint-42");return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {
+                workloadChoice(root.get(),prefix).getSelectionModel().selectFirst();
+                assertTrue(workloadText(root.get(),prefix).contains("Scheduled inspections: 4"));
+                if(root.get().getLeft()==null)fire(root.get(),"shell-menu");root.get().applyCss();root.get().layout();
+                snapshot(root.get(),size,"workload-shell-"+prefix+"-top",true);
+                ((javafx.scene.control.ScrollPane)root.get().lookup("#"+prefix+"-flow")).setVvalue(1);root.get().layout();
+                snapshot(root.get(),size,"workload-shell-"+prefix+"-bottom",true);
+                var bounds=root.get().lookup("#"+action).localToScene(root.get().lookup("#"+action).getBoundsInLocal());
+                assertTrue(bounds.getMinY()>=0 && bounds.getMaxY()<=size[1]);
+                answerDeparture(false);root.get().navigate("dashboard");assertNotNull(root.get().lookup("#"+prefix+"-technician-workload"));
+                assertNotNull(workloadChoice(root.get(),prefix).getValue());
+                answerDeparture(true);root.get().navigate("dashboard");return null;
+            });awaitControl(root.get(),"dashboard-refresh");
+        }
+    }
+
+    @Test
+    void workloadFailedReadsWritesEligibilityAndSaveReadRecovery() throws Exception {
+        for(boolean inspection:new boolean[]{false,true}) {
+            var service=new WorkloadPreview();var root=new java.util.concurrent.atomic.AtomicReference<Region>();
+            String prefix=inspection?"inspection":"repair",action=inspection?"inspection-save":"repair-assign";
+            fx(() -> {root.set(workloadView(service,inspection,new int[]{800,520}));return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {workloadChoice(root.get(),prefix).getSelectionModel().select(1);service.failWorkloads=true;fire(root.get(),prefix+"-refresh");return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {assertNull(root.get().lookup("#"+action));service.failWorkloads=false;fire(root.get(),prefix+"-refresh");return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {assertEquals(6,((com.aceos.model.TechnicianWorkload)workloadChoice(root.get(),prefix).getValue()).technician().getUserId());service.failWrite=true;service.gate=new CountDownLatch(1);fire(root.get(),action);fire(root.get(),action);return null;});
+            awaitFx(() -> service.writes.get()==1,true);
+            fx(() -> {assertTrue(root.get().lookup("#"+action).isDisabled());return null;});service.gate.countDown();awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {assertNotNull(workloadChoice(root.get(),prefix).getValue());assertTrue(root.get().lookup("#"+action).isDisabled());service.failWrite=false;service.gate=null;fire(root.get(),prefix+"-refresh");return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {service.failAfterSave=true;fire(root.get(),action);return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {assertTrue(((javafx.scene.control.Label)root.get().lookup("#"+prefix+"-feedback")).getText().contains(inspection?"Assignment saved.":"Action saved successfully."));assertNull(root.get().lookup("#"+action));service.failWorkloads=false;fire(root.get(),prefix+"-refresh");return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {assertEquals(2,service.writes.get());workloadChoice(root.get(),prefix).getSelectionModel().selectFirst();service.workloads=java.util.List.of(new com.aceos.model.TechnicianWorkload(service.repair.technician,0,0,0,0,0));fire(root.get(),prefix+"-refresh");return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {assertNull(workloadChoice(root.get(),prefix).getValue());assertTrue(workloadText(root.get(),prefix).contains("no longer eligible"));service.workloads=java.util.List.of();fire(root.get(),prefix+"-refresh");return null;});awaitControl(root.get(),prefix+"-refresh");
+            fx(() -> {assertTrue(root.get().lookup("#"+action).isDisabled());return null;});
         }
     }
 

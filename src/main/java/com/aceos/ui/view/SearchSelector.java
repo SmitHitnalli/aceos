@@ -17,6 +17,11 @@ final class SearchSelector<T> extends VBox {
     private final Function<T, Integer> identity;
 
     SearchSelector(String name, String id, Function<T, String> display, Function<T, Integer> identity) {
+        this(name, id, display, identity, display);
+    }
+
+    SearchSelector(String name, String id, Function<T, String> display, Function<T, Integer> identity,
+            Function<T, String> searchText) {
         super(8);
         this.identity = identity;
         setMinWidth(0);
@@ -32,7 +37,7 @@ final class SearchSelector<T> extends VBox {
         var filtered = new FilteredList<>(source);
         choices.setItems(filtered);
         search.textProperty().addListener((o, a, b) -> filtered.setPredicate(item ->
-                display.apply(item).toLowerCase(Locale.ROOT).contains(b.trim().toLowerCase(Locale.ROOT))));
+                searchText.apply(item).toLowerCase(Locale.ROOT).contains(b.trim().toLowerCase(Locale.ROOT))));
         Label label = new Label(name); label.setLabelFor(choices);
         getChildren().addAll(label, search, choices);
     }
@@ -43,6 +48,25 @@ final class SearchSelector<T> extends VBox {
                 .filter(item -> identity.apply(item).equals(identity.apply(previous))).findFirst().orElse(null));
     }
     T selected() { return choices.getValue(); }
+    void onSelectionChanged(Runnable action) {
+        choices.valueProperty().addListener((o, previous, current) -> action.run());
+    }
+    void wrapChoices(Function<T, String> display) {
+        java.util.function.Supplier<ListCell<T>> cell = () -> new ListCell<>() {
+            private final Label label = new Label();
+            {
+                label.setWrapText(true); label.setMinHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
+                label.prefWidthProperty().bind(choices.widthProperty().subtract(60));
+                setMinHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
+            }
+            @Override protected void updateItem(T item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(null); label.setText(item == null || empty ? "" : display.apply(item));
+                setGraphic(item == null || empty ? null : label);
+            }
+        };
+        choices.setCellFactory(list -> cell.get()); choices.setButtonCell(cell.get());
+    }
     void clear() { search.clear(); choices.setValue(null); }
     boolean isEmpty() { return source.isEmpty(); }
 }

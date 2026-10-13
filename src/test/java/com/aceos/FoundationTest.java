@@ -149,6 +149,67 @@ class FoundationTest {
         return admin.assignWorkOrder(c.getComplaintId(), 5);
     }
 
+    TechnicianWorkload workload(int id) throws Exception {
+        return admin.getTechnicianWorkloads().stream().filter(w -> w.technician().getUserId()==id).findFirst().orElseThrow();
+    }
+
+    void assertWorkload(int id,int waiting,int started,int verification,int scheduled,int overdue) throws Exception {
+        var w=workload(id);
+        assertEquals(List.of(waiting,started,verification,scheduled,overdue),
+                List.of(w.awaitingStart(),w.inProgress(),w.awaitingVerification(),w.scheduledInspections(),w.overdueInspections()));
+    }
+
+    @Test
+    void technicianWorkloadCountsTransitionsAndOverdueSubset() throws Exception {
+        assertEquals(List.of(5,6),admin.getTechnicianWorkloads().stream().map(w -> w.technician().getUserId()).toList());
+        assertWorkload(6,0,0,0,0,0);
+        Asset a=asset("WORKLOAD");
+        var waiting=assigned(a); var started=assigned(a); var completed=assigned(a); var verified=assigned(a);
+        technician.startWorkOrder(started.getWorkOrderId());
+        technician.startWorkOrder(completed.getWorkOrderId()); technician.completeWorkOrder(completed.getWorkOrderId(),"Finished");
+        technician.startWorkOrder(verified.getWorkOrderId()); technician.completeWorkOrder(verified.getWorkOrderId(),"Finished"); admin.verifyWorkOrder(verified.getWorkOrderId());
+        var overdue=admin.scheduleAssetInspection(a.getAssetId(),"Past due",LocalDate.now());
+        var today=admin.scheduleAssetInspection(a.getAssetId(),"Today",LocalDate.now());
+        var future=admin.scheduleAssetInspection(a.getAssetId(),"Future",LocalDate.now().plusDays(1));
+        var done=admin.scheduleAssetInspection(a.getAssetId(),"Completed",LocalDate.now());
+        admin.scheduleAssetInspection(a.getAssetId(),"Unassigned",LocalDate.now());
+        for(var i:List.of(overdue,today,future,done)) admin.assignInspection(i.getInspectionId(),5);
+        technician.completeAssetInspection(done.getInspectionId(),InspectionStatus.PASSED,"Checked",LocalDate.now());
+        try(var c=operator();var p=c.prepareStatement("UPDATE asset_inspections SET scheduled_date=? WHERE inspection_id=?")) {
+            p.setDate(1,java.sql.Date.valueOf(LocalDate.now().minusDays(1)));p.setInt(2,overdue.getInspectionId());p.executeUpdate();
+        }
+        assertWorkload(5,1,1,1,3,1);
+        admin.reassignWorkOrder(waiting.getWorkOrderId(),6); admin.assignInspection(overdue.getInspectionId(),6);
+        assertWorkload(5,0,1,1,2,0);
+        assertWorkload(6,1,0,0,1,1);
+        otherTechnician.startWorkOrder(waiting.getWorkOrderId()); otherTechnician.completeWorkOrder(waiting.getWorkOrderId(),"Done");
+        assertEquals(0,workload(6).inProgress()); assertEquals(1,workload(6).awaitingVerification());
+        admin.verifyWorkOrder(waiting.getWorkOrderId());
+        assertEquals(0,workload(6).awaitingVerification());
+        denied(() -> admin.reassignWorkOrder(started.getWorkOrderId(),6));
+        denied(() -> admin.assignInspection(done.getInspectionId(),6));
+        assertEquals(1,workload(5).inProgress());
+    }
+
+    @Test
+    void technicianWorkloadEligibilityPermissionsAndStaleChoices() throws Exception {
+        for(var who:List.of(requester,otherRequester,technician,otherTechnician,new AceOsService())) denied(who::getTechnicianWorkloads);
+        Asset a=asset("WORKLOAD-ELIGIBILITY");var c=complaint(requester,a);admin.acceptComplaint(c.getComplaintId(),"Proceed");
+        assertEquals(2,admin.getTechnicianWorkloads().size());
+        admin.deactivateAccount(6);
+        assertEquals(List.of(5),admin.getTechnicianWorkloads().stream().map(w -> w.technician().getUserId()).toList());
+        denied(() -> admin.assignWorkOrder(c.getComplaintId(),6));
+        admin.reactivateAccount(6);
+        assertEquals(List.of(5),admin.getTechnicianWorkloads().stream().map(w -> w.technician().getUserId()).toList());
+        admin.changeAccountRole(6,UserRole.REQUESTER);
+        assertEquals(1,admin.getTechnicianWorkloads().size());
+        admin.issueCredential(5);
+        assertTrue(admin.getTechnicianWorkloads().isEmpty());
+        denied(() -> admin.assignWorkOrder(c.getComplaintId(),5));
+        var stale=login(2);admin.issueCredential(2);denied(stale::getTechnicianWorkloads);
+        admin.signOut();denied(admin::getTechnicianWorkloads);
+    }
+
     static void denied(org.junit.jupiter.api.function.Executable action) {
         assertThrows(AceOsServiceException.class, action);
     }

@@ -19,7 +19,7 @@ import java.util.function.Function;
 /** Connected complaint/repair queues. All actions revalidate through existing services. */
 public final class RepairFlowView extends ScrollPane {
     private record Row(int id, String asset, String summary, String status, String person) {}
-    private record Loaded(RepairDetail detail, List<User> technicians) {}
+    private record Loaded(RepairDetail detail, List<TechnicianWorkload> technicians) {}
     private final AceOsService service;
     private final boolean jobs;
     private final UserRole role;
@@ -37,8 +37,7 @@ public final class RepairFlowView extends ScrollPane {
     private final TextField search = new TextField();
     private final ComboBox<String> status = new ComboBox<>();
     private final TextArea completion = new TextArea(), reviewReason = new TextArea(), comment = new TextArea();
-    private final SearchSelector<User> technicians = new SearchSelector<>("Technician", "repair-technician",
-            u -> u.getName() + " · " + u.getEmail() + " · #" + u.getUserId(), User::getUserId);
+    private final TechnicianSelector technicians = new TechnicianSelector("repair-technician");
     private Integer selectedId;
     private boolean busy, saving;
     private String savedFeedback;
@@ -161,7 +160,7 @@ public final class RepairFlowView extends ScrollPane {
             var snapshot = jobs ? service.getWorkDetail(id) : service.getRepairDetail(id);
             boolean choose = role == UserRole.ADMINISTRATOR && (snapshot.complaint().getStatus() == ComplaintStatus.ACCEPTED
                     || snapshot.work() != null && snapshot.work().getStatus() == WorkOrderStatus.ASSIGNED);
-            return new Loaded(snapshot, choose ? service.getActiveTechnicians() : List.of());
+            return new Loaded(snapshot, choose ? service.getTechnicianWorkloads() : List.of());
         }, loaded -> { render(loaded); refresh.setText("Refresh"); message(savedFeedback == null ? "Current progress loaded." : savedFeedback, false); },
                 error -> {
                     detail.getChildren().clear();
@@ -194,7 +193,7 @@ public final class RepairFlowView extends ScrollPane {
                     reviewAction("Reject complaint","repair-reject",c.getComplaintId(),false)));
         }
         if (role == UserRole.ADMINISTRATOR && (c.getStatus() == ComplaintStatus.ACCEPTED || w != null && w.getStatus() == WorkOrderStatus.ASSIGNED)) {
-            technicians.setItems(loaded.technicians());
+            technicians.setItems(loaded.technicians(), w == null ? 0 : w.getTechnician().getUserId());
             var assign = new Button(w == null ? "Assign repair" : "Reassign unstarted repair");
             assign.setId("repair-assign"); assign.getStyleClass().add("primary"); assign.setWrapText(true);
             assign.setOnAction(e -> {
