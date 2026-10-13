@@ -114,7 +114,7 @@ The final result is a coherent role-based application with traceable repair corr
 
 ## 12 Source references
 
-The report describes the completed v2.0.0 college application. Current source and documentation are maintained on main. The annotated v2.0.0 tag identifies the packaged source; the GitHub release provides the college package, source archive and SHA-256 checksums.
+The report describes the completed v2.0.0 college application. Current source and documentation are maintained on main. The annotated v2.0.0 tag identifies the packaged source; the GitHub release provides the college package and source archive.
 
 - pom.xml and src/main/resources/database/V000__baseline.sql through V005__repair_corrections.sql
 - src/main/java/com/aceos/model/Complaint.java and WorkOrder.java
@@ -126,7 +126,7 @@ The report describes the completed v2.0.0 college application. Current source an
 - src/test/java/com/aceos/FoundationTest.java and UiSmokeTest.java
 - docs/college-scope.md foundation.md oop-design.md transactions.md verification.md and data-dictionary.md
 
-The public repository and preserved baseline are at https://github.com/SmitHitnalli/aceos. The Notion knowledge hub is a documentation companion, not the runtime database.
+The project repository and preserved baseline are at https://github.com/SmitHitnalli/aceos. The Notion knowledge hub is a documentation companion, not the runtime database.
 
 
 ## Appendix ER views

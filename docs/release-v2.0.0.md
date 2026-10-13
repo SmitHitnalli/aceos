@@ -14,6 +14,6 @@ Documentation/schema/link and packaging identity/integrity checks supplement the
 
 ## Package
 
-The college ZIP includes the application, nine runtime JARs, source, migrations, current report/reference documents, launcher and final test evidence. Java24 and separate MySQL8 configuration are prerequisites; credentials, backups, .local and .git are excluded. A separate source ZIP contains the exact frozen source tree. Per-file and archive SHA-256 checks identify the outputs. See distribution/START-HERE.md and docs/foundation.md.
+The college ZIP includes the application, nine runtime JARs, source, migrations, current report/reference documents, launcher and final test evidence. Java24 and separate MySQL8 configuration are prerequisites; credentials, backups, .local and .git are excluded. A separate source ZIP contains the exact frozen source tree. Package contents and integrity were verified before publication. See distribution/START-HERE.md and docs/foundation.md.
 
-The release includes the college ZIP, source ZIP and SHA256SUMS.txt. Check the published hashes after downloading. Documentation and packaging may be refreshed without changing the verified application JAR. No deployment is included.
+The release includes the college ZIP and source ZIP. Documentation may be maintained on main without changing the tagged release packages or verified application JAR. No deployment is included.
