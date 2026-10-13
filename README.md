@@ -51,7 +51,7 @@ The earlier [4 October report](output/pdf/AceOS_Project_Report.pdf) documents fr
 
 ## Setup and run
 
-Follow the [complete setup guide](docs/foundation.md). The current app requires V000 followed by matching COMPLETE V001–V005 migrations, not `database/schema.sql` alone.
+Start with [Run AceOS — choose your situation](docs/run-guide.md): Smit's existing computer, a new computer using the college ZIP, or a source build. Developer migration/recovery details remain in the [complete setup reference](docs/foundation.md). The current app requires V000 followed by matching COMPLETE V001–V005 migrations, not `database/schema.sql` alone.
 
 Use new isolated `aceos_next_dev` and disposable `aceos_next_test` schemas with separate operator/runtime accounts. This machine uses loopback port 13316. Keep credentials/backups private under ignored `.local/` or your private local environment.
 
