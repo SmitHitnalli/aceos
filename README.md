@@ -2,6 +2,9 @@
 
 AceOS (Asset, Compliance & Equipment Operations System) is a local JavaFX application for institutional assets, complaints, repairs, preventive schedules and inspections. It is an independent OOP and RDBMS college project inspired by campus operations.
 
+## Notion File Link
+https://app.notion.com/p/AceOS-Asset-Compliance-Equipment-Operations-System-3d786f0db4b980028970e6cd3d95ba68?source=copy_link
+
 ## Current build
 
 The college feature scope is closed. Accounts and sessions, role workspaces, connected management screens, comments/review reasons, technician workload, complaint withdrawal/reopening and repair return/correction are implemented. Smit confirmed the role walkthroughs, remaining keyboard/screen-reader/reset/invalidation/feedback checks and the five-step repair-return walkthrough. Human confirmations are separate from automated verification.
